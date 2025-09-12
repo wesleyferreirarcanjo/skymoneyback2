@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User } from './entities/user.entity';
+import { User, UserStatus } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -86,6 +86,7 @@ export class UsersService {
     user.adminApproved = true;
     user.adminApprovedAt = new Date();
     user.adminApprovedBy = adminId;
+    user.status = UserStatus.APPROVED;
     return this.usersRepository.save(user);
   }
 
