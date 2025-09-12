@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { QueueModule } from './queue/queue.module';
 import { DatabaseModule } from './database/database.module';
 import { InitService } from './database/init.service';
 
@@ -10,6 +11,7 @@ import { InitService } from './database/init.service';
   imports: [
     DatabaseModule,
     UsersModule,
+    QueueModule,
     AuthModule,
   ],
   controllers: [AppController],

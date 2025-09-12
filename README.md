@@ -14,6 +14,9 @@ A comprehensive NestJS application for managing users with financial data, Brazi
 - **User Status Management** - PENDING, ACTIVE, INACTIVE, SUSPENDED, APPROVED states
 - **Auto Admin Creation** - Admin user automatically created on application startup
 - **Password Hashing** - Secure password storage with bcrypt
+- **Queue Management System** - Complete donation queue management with position tracking
+- **Receiver Management** - Track and manage current donation receivers
+- **Queue Statistics** - Comprehensive queue analytics and reporting
 - **PostgreSQL Database** - Robust data persistence
 
 ## Use Case
@@ -24,8 +27,11 @@ This system is designed for Brazilian financial applications that need to:
 - Implement user approval workflows for financial services
 - Store banking information for payment processing
 - Track user status and admin approval processes
+- Manage donation queues with position tracking and receiver management
+- Implement fair distribution systems for donations or benefits
+- Track user participation in donation events
 
-Perfect for fintech applications, payment platforms, cryptocurrency exchanges, or any service requiring extensive user financial data collection in Brazil.
+Perfect for fintech applications, payment platforms, cryptocurrency exchanges, donation platforms, or any service requiring extensive user financial data collection and queue management in Brazil.
 
 ## Setup
 
@@ -130,6 +136,22 @@ When running in development mode:
 - `PATCH /users/:id/approve` - Approve user (admin only)
 - `DELETE /users/:id` - Delete user (admin only)
 
+### Queue Management
+- `POST /queue` - Join a donation queue (authenticated)
+- `GET /queue` - Get all queue entries (admin only)
+- `GET /queue/donation/:donationNumber` - Get queue for specific donation count
+- `GET /queue/my-queues` - Get current user's queue entries
+- `GET /queue/stats/:donationNumber` - Get queue statistics for donation count
+- `GET /queue/position/:donationNumber` - Get user's position in specific donation count queue
+- `GET /queue/current-receiver/:donationNumber` - Get current receiver for donation count
+- `GET /queue/:id` - Get specific queue entry by ID
+- `PATCH /queue/:id` - Update queue entry (admin only)
+- `PATCH /queue/set-receiver/:donationNumber/:userId` - Set specific user as receiver (admin only)
+- `PATCH /queue/next-receiver/:donationNumber` - Move to next receiver in queue (admin only)
+- `PATCH /queue/reorder/:donationNumber` - Reorder queue positions (admin only)
+- `DELETE /queue/:id` - Remove queue entry (admin only)
+- `DELETE /queue/leave/:donationNumber` - Leave specific donation count queue
+
 ### Authentication Headers
 Include the JWT token in your requests:
 ```
@@ -170,6 +192,14 @@ The system uses a comprehensive user table with extensive financial data collect
 - User status (PENDING/ACTIVE/INACTIVE/SUSPENDED)
 - Admin approval system with approval tracking
 - Timestamps for creation and updates
+
+### Queue Management
+- **Queue Entries**: Track user positions in donation queues
+- **Position Management**: Sequential position tracking (1, 2, 3, etc.)
+- **Donation Events**: Organize queues by donation count (number of donations received)
+- **Receiver Tracking**: Current receiver flag for each donation round
+- **Passed Users**: Track users who were skipped in queue
+- **User Relations**: Foreign key relationships to user data
 
 ## Environment Variables
 ```bash
@@ -254,3 +284,344 @@ curl -X PATCH http://localhost:3000/users/USER_ID/approve \
 curl -X GET http://localhost:3000/users/profile \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
+
+## Queue Management API Examples
+
+**Note**: The `donation_number` field represents the count of donations received (e.g., 5 means this is the 5th donation round). This organizes queues by donation rounds rather than arbitrary identifiers.
+
+### Join a donation queue
+```bash
+curl -X POST http://localhost:3000/queue \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "position": 1,
+    "donation_number": 5,
+    "user_id": "USER_UUID_HERE"
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": "queue-uuid-here",
+  "position": 1,
+  "donation_number": 5,
+  "is_receiver": false,
+  "passed_user_ids": [],
+  "user_id": "USER_UUID_HERE",
+  "created_at": "2024-01-15T10:30:00.000Z",
+  "updated_at": "2024-01-15T10:30:00.000Z",
+  "user": {
+    "id": "USER_UUID_HERE",
+    "firstName": "João",
+    "lastName": "Silva",
+    "email": "joao@example.com"
+  }
+}
+```
+
+### Get queue for specific donation count
+```bash
+curl -X GET http://localhost:3000/queue/donation/5 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+[
+  {
+    "id": "queue-uuid-1",
+    "position": 1,
+    "donation_number": 5,
+    "is_receiver": true,
+    "passed_user_ids": [],
+    "user_id": "USER_UUID_1",
+    "created_at": "2024-01-15T10:30:00.000Z",
+    "updated_at": "2024-01-15T10:30:00.000Z",
+    "user": {
+      "id": "USER_UUID_1",
+      "firstName": "João",
+      "lastName": "Silva",
+      "email": "joao@example.com"
+    }
+  },
+  {
+    "id": "queue-uuid-2",
+    "position": 2,
+    "donation_number": 5,
+    "is_receiver": false,
+    "passed_user_ids": [],
+    "user_id": "USER_UUID_2",
+    "created_at": "2024-01-15T10:35:00.000Z",
+    "updated_at": "2024-01-15T10:35:00.000Z",
+    "user": {
+      "id": "USER_UUID_2",
+      "firstName": "Maria",
+      "lastName": "Santos",
+      "email": "maria@example.com"
+    }
+  }
+]
+```
+
+### Get my queue entries
+```bash
+curl -X GET http://localhost:3000/queue/my-queues \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+[
+  {
+    "id": "queue-uuid-1",
+    "position": 1,
+    "donation_number": 5,
+    "is_receiver": true,
+    "passed_user_ids": [],
+    "user_id": "USER_UUID_HERE",
+    "created_at": "2024-01-15T10:30:00.000Z",
+    "updated_at": "2024-01-15T10:30:00.000Z"
+  }
+]
+```
+
+### Get queue statistics
+```bash
+curl -X GET http://localhost:3000/queue/stats/5 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "totalUsers": 5,
+  "currentReceiver": {
+    "id": "queue-uuid-1",
+    "position": 1,
+    "donation_number": 5,
+    "is_receiver": true,
+    "passed_user_ids": [],
+    "user_id": "USER_UUID_1",
+    "created_at": "2024-01-15T10:30:00.000Z",
+    "updated_at": "2024-01-15T10:30:00.000Z",
+    "user": {
+      "id": "USER_UUID_1",
+      "firstName": "João",
+      "lastName": "Silva",
+      "email": "joao@example.com"
+    }
+  },
+  "nextInLine": {
+    "id": "queue-uuid-2",
+    "position": 2,
+    "donation_number": 5,
+    "is_receiver": false,
+    "passed_user_ids": [],
+    "user_id": "USER_UUID_2",
+    "created_at": "2024-01-15T10:35:00.000Z",
+    "updated_at": "2024-01-15T10:35:00.000Z",
+    "user": {
+      "id": "USER_UUID_2",
+      "firstName": "Maria",
+      "lastName": "Santos",
+      "email": "maria@example.com"
+    }
+  }
+}
+```
+
+### Get my position in queue
+```bash
+curl -X GET http://localhost:3000/queue/position/5 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "position": 3
+}
+```
+
+### Set specific user as receiver (Admin only)
+```bash
+curl -X PATCH http://localhost:3000/queue/set-receiver/5/USER_UUID_2 \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "id": "queue-uuid-2",
+  "position": 2,
+  "donation_number": 5,
+  "is_receiver": true,
+  "passed_user_ids": ["USER_UUID_1"],
+  "user_id": "USER_UUID_2",
+  "created_at": "2024-01-15T10:35:00.000Z",
+  "updated_at": "2024-01-15T11:00:00.000Z",
+  "user": {
+    "id": "USER_UUID_2",
+    "firstName": "Maria",
+    "lastName": "Santos",
+    "email": "maria@example.com"
+  }
+}
+```
+
+### Move to next receiver (Admin only)
+```bash
+curl -X PATCH http://localhost:3000/queue/next-receiver/5 \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "id": "queue-uuid-3",
+  "position": 3,
+  "donation_number": 5,
+  "is_receiver": true,
+  "passed_user_ids": ["USER_UUID_1", "USER_UUID_2"],
+  "user_id": "USER_UUID_3",
+  "created_at": "2024-01-15T10:40:00.000Z",
+  "updated_at": "2024-01-15T11:05:00.000Z",
+  "user": {
+    "id": "USER_UUID_3",
+    "firstName": "Pedro",
+    "lastName": "Costa",
+    "email": "pedro@example.com"
+  }
+}
+```
+
+### Reorder queue positions (Admin only)
+```bash
+curl -X PATCH http://localhost:3000/queue/reorder/5 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -d '[
+    {"id": "queue-uuid-2", "position": 1},
+    {"id": "queue-uuid-1", "position": 2},
+    {"id": "queue-uuid-3", "position": 3}
+  ]'
+```
+
+**Response:**
+```json
+[
+  {
+    "id": "queue-uuid-2",
+    "position": 1,
+    "donation_number": 5,
+    "is_receiver": true,
+    "passed_user_ids": [],
+    "user_id": "USER_UUID_2",
+    "created_at": "2024-01-15T10:35:00.000Z",
+    "updated_at": "2024-01-15T11:10:00.000Z",
+    "user": {
+      "id": "USER_UUID_2",
+      "firstName": "Maria",
+      "lastName": "Santos",
+      "email": "maria@example.com"
+    }
+  },
+  {
+    "id": "queue-uuid-1",
+    "position": 2,
+    "donation_number": 5,
+    "is_receiver": false,
+    "passed_user_ids": [],
+    "user_id": "USER_UUID_1",
+    "created_at": "2024-01-15T10:30:00.000Z",
+    "updated_at": "2024-01-15T11:10:00.000Z",
+    "user": {
+      "id": "USER_UUID_1",
+      "firstName": "João",
+      "lastName": "Silva",
+      "email": "joao@example.com"
+    }
+  },
+  {
+    "id": "queue-uuid-3",
+    "position": 3,
+    "donation_number": 5,
+    "is_receiver": false,
+    "passed_user_ids": [],
+    "user_id": "USER_UUID_3",
+    "created_at": "2024-01-15T10:40:00.000Z",
+    "updated_at": "2024-01-15T11:10:00.000Z",
+    "user": {
+      "id": "USER_UUID_3",
+      "firstName": "Pedro",
+      "lastName": "Costa",
+      "email": "pedro@example.com"
+    }
+  }
+]
+```
+
+### Leave a donation queue
+```bash
+curl -X DELETE http://localhost:3000/queue/leave/5 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "message": "Successfully left the donation queue"
+}
+```
+
+### Get current receiver for donation
+```bash
+curl -X GET http://localhost:3000/queue/current-receiver/5 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "id": "queue-uuid-2",
+  "position": 1,
+  "donation_number": 5,
+  "is_receiver": true,
+  "passed_user_ids": ["USER_UUID_1"],
+  "user_id": "USER_UUID_2",
+  "created_at": "2024-01-15T10:35:00.000Z",
+  "updated_at": "2024-01-15T11:00:00.000Z",
+  "user": {
+    "id": "USER_UUID_2",
+    "firstName": "Maria",
+    "lastName": "Santos",
+    "email": "maria@example.com"
+  }
+}
+```
+
+## Queue Management Features
+
+### Key Capabilities
+- **Position Tracking**: Sequential position management (1, 2, 3, etc.)
+- **Donation Events**: Organize multiple donation queues by donation number
+- **Receiver Management**: Track current receiver and move to next
+- **Passed Users**: Keep track of users who were skipped
+- **Queue Statistics**: Get comprehensive queue analytics
+- **Admin Controls**: Full administrative control over queue management
+- **User Self-Service**: Users can join/leave queues and check positions
+
+### Queue States
+- **Position**: Sequential number indicating user's place in queue
+- **is_receiver**: Boolean flag indicating if user is currently receiving
+- **passed_user_ids**: Array of user IDs who previously held this position
+- **donation_number**: Number of donations received (count) - organizes queues by donation round
+
+### Error Handling
+- **409 Conflict**: User already in queue, position already taken
+- **404 Not Found**: Queue entry not found, user not in queue
+- **400 Bad Request**: Invalid position data, non-sequential positions
+- **401 Unauthorized**: Missing or invalid JWT token
+- **403 Forbidden**: Insufficient permissions for admin-only operations

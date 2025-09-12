@@ -1,0 +1,262 @@
+import {
+    Injectable,
+    NotFoundException,
+    ConflictException,
+    BadRequestException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, In } from 'typeorm';
+import { Queue } from './entities/queue.entity';
+import { CreateQueueDto } from './dto/create-queue.dto';
+import { UpdateQueueDto } from './dto/update-queue.dto';
+
+@Injectable()
+export class QueueService {
+    constructor(
+        @InjectRepository(Queue)
+        private queueRepository: Repository<Queue>,
+    ) {}
+
+    async create(createQueueDto: CreateQueueDto): Promise<Queue> {
+        // Check if user is already in this donation queue
+        const existingEntry = await this.queueRepository.findOne({
+            where: {
+                user_id: createQueueDto.user_id,
+                donation_number: createQueueDto.donation_number,
+            },
+        });
+
+        if (existingEntry) {
+            throw new ConflictException('User is already in this donation queue');
+        }
+
+        // Check if position is already taken
+        const positionTaken = await this.queueRepository.findOne({
+            where: {
+                position: createQueueDto.position,
+                donation_number: createQueueDto.donation_number,
+            },
+        });
+
+        if (positionTaken) {
+            throw new ConflictException('Position is already taken in this donation queue');
+        }
+
+        const queue = this.queueRepository.create(createQueueDto);
+        return this.queueRepository.save(queue);
+    }
+
+    async findAll(): Promise<Queue[]> {
+        return this.queueRepository.find({
+            relations: ['user'],
+            order: { position: 'ASC' },
+        });
+    }
+
+    async findByDonationNumber(donationNumber: number): Promise<Queue[]> {
+        return this.queueRepository.find({
+            where: { donation_number: donationNumber },
+            relations: ['user'],
+            order: { position: 'ASC' },
+        });
+    }
+
+    async findOne(id: string): Promise<Queue> {
+        const queue = await this.queueRepository.findOne({
+            where: { id },
+            relations: ['user'],
+        });
+
+        if (!queue) {
+            throw new NotFoundException('Queue entry not found');
+        }
+
+        return queue;
+    }
+
+    async findByUserId(userId: string): Promise<Queue[]> {
+        return this.queueRepository.find({
+            where: { user_id: userId },
+            relations: ['user'],
+            order: { donation_number: 'DESC', position: 'ASC' },
+        });
+    }
+
+    async update(id: string, updateQueueDto: UpdateQueueDto): Promise<Queue> {
+        const queue = await this.findOne(id);
+
+        // If updating position, check if new position is available
+        if (updateQueueDto.position && updateQueueDto.position !== queue.position) {
+            const positionTaken = await this.queueRepository.findOne({
+                where: {
+                    position: updateQueueDto.position,
+                    donation_number: queue.donation_number,
+                },
+            });
+
+            if (positionTaken && positionTaken.id !== id) {
+                throw new ConflictException('Position is already taken in this donation queue');
+            }
+        }
+
+        Object.assign(queue, updateQueueDto);
+        return this.queueRepository.save(queue);
+    }
+
+    async remove(id: string): Promise<void> {
+        const queue = await this.findOne(id);
+        await this.queueRepository.remove(queue);
+    }
+
+    async removeByUserId(userId: string, donationNumber: number): Promise<void> {
+        const queue = await this.queueRepository.findOne({
+            where: {
+                user_id: userId,
+                donation_number: donationNumber,
+            },
+        });
+
+        if (queue) {
+            await this.queueRepository.remove(queue);
+        }
+    }
+
+    async getCurrentReceiver(donationNumber: number): Promise<Queue | null> {
+        return this.queueRepository.findOne({
+            where: {
+                donation_number: donationNumber,
+                is_receiver: true,
+            },
+            relations: ['user'],
+        });
+    }
+
+    async setReceiver(donationNumber: number, userId: string): Promise<Queue> {
+        // First, unset any current receiver
+        await this.queueRepository.update(
+            {
+                donation_number: donationNumber,
+                is_receiver: true,
+            },
+            { is_receiver: false },
+        );
+
+        // Find the user's queue entry
+        const queue = await this.queueRepository.findOne({
+            where: {
+                user_id: userId,
+                donation_number: donationNumber,
+            },
+        });
+
+        if (!queue) {
+            throw new NotFoundException('User not found in this donation queue');
+        }
+
+        // Set as receiver
+        queue.is_receiver = true;
+        return this.queueRepository.save(queue);
+    }
+
+    async moveToNextReceiver(donationNumber: number): Promise<Queue | null> {
+        const currentReceiver = await this.getCurrentReceiver(donationNumber);
+        
+        if (!currentReceiver) {
+            // No current receiver, get the first person in queue
+            const firstInQueue = await this.queueRepository.findOne({
+                where: { donation_number: donationNumber },
+                order: { position: 'ASC' },
+            });
+
+            if (firstInQueue) {
+                firstInQueue.is_receiver = true;
+                return this.queueRepository.save(firstInQueue);
+            }
+            return null;
+        }
+
+        // Add current receiver to passed_user_ids of next person
+        const nextInQueue = await this.queueRepository.findOne({
+            where: {
+                donation_number: donationNumber,
+                position: currentReceiver.position + 1,
+            },
+        });
+
+        if (nextInQueue) {
+            // Add current receiver to passed users list
+            const passedUserIds = nextInQueue.passed_user_ids || [];
+            if (!passedUserIds.includes(currentReceiver.user_id)) {
+                passedUserIds.push(currentReceiver.user_id);
+                nextInQueue.passed_user_ids = passedUserIds;
+            }
+
+            // Set next person as receiver
+            currentReceiver.is_receiver = false;
+            nextInQueue.is_receiver = true;
+
+            await this.queueRepository.save([currentReceiver, nextInQueue]);
+            return nextInQueue;
+        }
+
+        // No one else in queue, unset current receiver
+        currentReceiver.is_receiver = false;
+        await this.queueRepository.save(currentReceiver);
+        return null;
+    }
+
+    async getQueuePosition(userId: string, donationNumber: number): Promise<number | null> {
+        const queue = await this.queueRepository.findOne({
+            where: {
+                user_id: userId,
+                donation_number: donationNumber,
+            },
+        });
+
+        return queue ? queue.position : null;
+    }
+
+    async getQueueStats(donationNumber: number): Promise<{
+        totalUsers: number;
+        currentReceiver: Queue | null;
+        nextInLine: Queue | null;
+    }> {
+        const queues = await this.findByDonationNumber(donationNumber);
+        const currentReceiver = await this.getCurrentReceiver(donationNumber);
+        
+        let nextInLine = null;
+        if (currentReceiver) {
+            nextInLine = queues.find(q => q.position === currentReceiver.position + 1) || null;
+        } else if (queues.length > 0) {
+            nextInLine = queues[0];
+        }
+
+        return {
+            totalUsers: queues.length,
+            currentReceiver,
+            nextInLine,
+        };
+    }
+
+    async reorderQueue(donationNumber: number, newOrder: { id: string; position: number }[]): Promise<Queue[]> {
+        // Validate that all positions are unique and sequential
+        const positions = newOrder.map(item => item.position).sort((a, b) => a - b);
+        for (let i = 0; i < positions.length; i++) {
+            if (positions[i] !== i + 1) {
+                throw new BadRequestException('Positions must be sequential starting from 1');
+            }
+        }
+
+        // Update positions
+        const updatePromises = newOrder.map(item =>
+            this.queueRepository.update(
+                { id: item.id, donation_number: donationNumber },
+                { position: item.position }
+            )
+        );
+
+        await Promise.all(updatePromises);
+
+        return this.findByDonationNumber(donationNumber);
+    }
+}
