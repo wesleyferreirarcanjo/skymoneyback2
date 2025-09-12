@@ -5,7 +5,6 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { QueueModule } from './queue/queue.module';
 import { DatabaseModule } from './database/database.module';
-import { InitService } from './database/init.service';
 
 @Module({
   imports: [
@@ -15,6 +14,6 @@ import { InitService } from './database/init.service';
     AuthModule,
   ],
   controllers: [AppController],
-  providers: [AppService, InitService],
+  providers: [AppService],
 })
 export class AppModule {}
