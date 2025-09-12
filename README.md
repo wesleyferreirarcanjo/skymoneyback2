@@ -57,10 +57,22 @@ npm install
 
 2. Set up your environment variables:
 ```bash
-cp .env.example .env
+# Create .env file with your database configuration
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_NAME=skymoneyback
+DATABASE_USER=postgres
+DATABASE_PASSWORD=password
+DATABASE_SYNC=true
+JWT_SECRET=your-secret-key-here
+NODE_ENV=development
+PORT=3000
 ```
 
-3. Configure your database connection in `.env`
+3. Test your database connection:
+```bash
+npm run db:test
+```
 
 4. Run the application:
 ```bash
@@ -80,6 +92,11 @@ npm run start:prod
 - `docker-scripts.bat build` - Build the application
 - `docker-scripts.bat clean` - Clean up containers and volumes
 - `docker-scripts.bat seed` - Run database seed (create admin user)
+
+### Database Management
+- `npm run db:test` - Test database connection and show configuration
+- `npm run seed` - Run database seed (create admin user)
+- `GET /health` - Health check endpoint with database status
 
 ### PgAdmin Access
 When running in development mode:
@@ -135,16 +152,33 @@ The system uses a comprehensive user table with extensive financial data collect
 - Timestamps for creation and updates
 
 ## Environment Variables
-```
-DB_HOST=localhost
-DB_PORT=5432
-DB_USERNAME=postgres
-DB_PASSWORD=password
-DB_NAME=skymoneyback
-JWT_SECRET=your-secret-key
+```bash
+# Database Configuration
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_NAME=skymoneyback
+DATABASE_USER=postgres
+DATABASE_PASSWORD=password
+DATABASE_SYNC=true
+
+# JWT Configuration
+JWT_SECRET=your-secret-key-here
+
+# Application Configuration
 NODE_ENV=development
 PORT=3000
 ```
+
+### Environment Variables Description
+- `DATABASE_HOST` - PostgreSQL server host (default: localhost)
+- `DATABASE_PORT` - PostgreSQL server port (default: 5432)
+- `DATABASE_NAME` - Database name (default: skymoneyback)
+- `DATABASE_USER` - Database username (default: postgres)
+- `DATABASE_PASSWORD` - Database password (default: password)
+- `DATABASE_SYNC` - Enable/disable database synchronization (default: true for development)
+- `JWT_SECRET` - Secret key for JWT token signing
+- `NODE_ENV` - Application environment (development/production)
+- `PORT` - Application port (default: 3000)
 
 ## Example API Usage
 
