@@ -12,8 +12,13 @@ async function bootstrap() {
     transform: true,
   }));
 
-  // Enable CORS if needed
-  app.enableCors();
+  // Enable CORS for all origins
+  app.enableCors({
+    origin: true, // Allow all origins
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    credentials: true,
+  });
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
