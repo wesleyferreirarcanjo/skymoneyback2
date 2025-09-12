@@ -74,7 +74,7 @@ export class QueueController {
         return this.queueService.getCurrentReceiver(donationNumber);
     }
 
-    @Patch('swap')
+    @Patch('swap-positions')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
     swapPositions(@Body() swapData: { firstUserId: string; secondUserId: string }) {

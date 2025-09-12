@@ -184,7 +184,7 @@ When running in development mode:
 - `GET /queue/:id` - Get specific queue entry by ID
 - `PATCH /queue/:id` - Update queue entry (admin only)
 - `PATCH /queue/reorder/:donationNumber` - Reorder queue positions (admin only)
-- `PATCH /queue/swap` - Swap positions between two users in queue (admin only)
+- `PATCH /queue/swap-positions` - Swap positions between two users in queue (admin only)
 - `DELETE /queue/:id` - Remove queue entry (admin only)
 - `DELETE /queue/leave/:donationNumber` - Leave specific donation count queue
 
@@ -555,7 +555,7 @@ curl -X PATCH http://localhost:3000/queue/reorder/5 \
 
 ### Swap positions between two users (Admin only)
 ```bash
-curl -X PATCH http://localhost:3000/queue/swap \
+curl -X PATCH http://localhost:3000/queue/swap-positions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
   -d '{
