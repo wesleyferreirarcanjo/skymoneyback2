@@ -258,7 +258,6 @@ curl -X POST http://localhost:3000/auth/register \
     "btcQrCode": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
     "usdtAddress": "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
     "usdtQrCode": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-    "avatar": "https://example.com/avatar.jpg",
     "password": "password123"
   }'
 ```
