@@ -26,7 +26,7 @@ export class Queue {
     @Column({ type: 'uuid', array: true, nullable: true })
     passed_user_ids: string[];
 
-    @Column({ type: 'uuid', nullable: false })
+    @Column({ type: 'uuid', nullable: true })
     user_id: string;
 
     @ManyToOne(() => User, { onDelete: 'CASCADE' })

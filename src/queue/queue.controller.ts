@@ -12,6 +12,7 @@ import {
     UseInterceptors,
     Query,
     ParseIntPipe,
+    HttpCode,
 } from '@nestjs/common';
 import { QueueService } from './queue.service';
 import { CreateQueueDto } from './dto/create-queue.dto';
@@ -100,12 +101,14 @@ export class QueueController {
     @Delete(':id')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
+    @HttpCode(200)
     remove(@Param('id') id: string) {
         return this.queueService.remove(id);
     }
 
     @Delete('leave/:donationNumber')
     @UseGuards(JwtAuthGuard)
+    @HttpCode(200)
     leaveQueue(
         @Request() req,
         @Param('donationNumber', ParseIntPipe) donationNumber: number,

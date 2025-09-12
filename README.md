@@ -515,6 +515,21 @@ curl -X PATCH http://localhost:3000/queue/reorder/5 \
 ]
 ```
 
+### Remove queue entry (Admin only)
+```bash
+curl -X DELETE http://localhost:3000/queue/QUEUE_UUID_HERE \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "message": "User successfully removed from queue"
+}
+```
+
+**Note:** When a user is removed from the queue, the queue entry is not deleted. Instead, the `user_id` is set to `null` and the removed user's ID is added to the `passed_user_ids` array for tracking purposes.
+
 ### Leave a donation queue
 ```bash
 curl -X DELETE http://localhost:3000/queue/leave/5 \

@@ -103,12 +103,31 @@ export class QueueService {
         return this.queueRepository.save(queue);
     }
 
-    async remove(id: string): Promise<void> {
+    async remove(id: string): Promise<{ message: string }> {
         const queue = await this.findOne(id);
-        await this.queueRepository.remove(queue);
+        
+        if (!queue.user_id) {
+            throw new NotFoundException('Queue entry has no user to remove');
+        }
+
+        const userIdToRemove = queue.user_id;
+        
+        // Set user_id to null
+        queue.user_id = null;
+        queue.user = null;
+        
+        // Add the removed user to passed_user_ids
+        const passedUserIds = queue.passed_user_ids || [];
+        if (!passedUserIds.includes(userIdToRemove)) {
+            passedUserIds.push(userIdToRemove);
+            queue.passed_user_ids = passedUserIds;
+        }
+        
+        await this.queueRepository.save(queue);
+        return { message: 'User successfully removed from queue' };
     }
 
-    async removeByUserId(userId: string, donationNumber: number): Promise<void> {
+    async removeByUserId(userId: string, donationNumber: number): Promise<{ message: string }> {
         const queue = await this.queueRepository.findOne({
             where: {
                 user_id: userId,
@@ -116,9 +135,23 @@ export class QueueService {
             },
         });
 
-        if (queue) {
-            await this.queueRepository.remove(queue);
+        if (!queue) {
+            throw new NotFoundException('User not found in this donation queue');
         }
+
+        // Set user_id to null
+        queue.user_id = null;
+        queue.user = null;
+        
+        // Add the removed user to passed_user_ids
+        const passedUserIds = queue.passed_user_ids || [];
+        if (!passedUserIds.includes(userId)) {
+            passedUserIds.push(userId);
+            queue.passed_user_ids = passedUserIds;
+        }
+        
+        await this.queueRepository.save(queue);
+        return { message: 'Successfully left the donation queue' };
     }
 
     async getCurrentReceiver(donationNumber: number): Promise<Queue | null> {
