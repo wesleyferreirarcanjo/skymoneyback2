@@ -49,11 +49,6 @@ export class UsersController {
     return this.usersService.findOne(id);
   }
 
-  @Patch('profile')
-  @UseGuards(JwtAuthGuard)
-  updateProfile(@Request() req, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(req.user.id, updateUserDto);
-  }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)

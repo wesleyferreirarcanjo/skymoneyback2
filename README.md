@@ -124,10 +124,9 @@ When running in development mode:
 
 ### Users
 - `GET /users/profile` - Get current user profile (authenticated)
-- `PATCH /users/profile` - Update current user profile (authenticated)
 - `GET /users` - Get all users (admin only)
 - `GET /users/:id` - Get user by ID (admin only)
-- `PATCH /users/:id` - Update user by ID (admin only)
+- `PATCH /users/:id` - Update user by ID (admin only - can modify any field)
 - `PATCH /users/:id/approve` - Approve user (admin only)
 - `DELETE /users/:id` - Delete user (admin only)
 
@@ -137,9 +136,20 @@ Include the JWT token in your requests:
 Authorization: Bearer <your-jwt-token>
 ```
 
-## User Roles
-- `USER` - Regular user with limited access
+## User Roles & Access Control
+- `USER` - Regular user with read-only access
+  - Can only view their own profile
+  - Cannot modify any user data
+  - Cannot access other users' data
 - `ADMIN` - Administrator with full access
+  - Can modify any user data including sensitive fields
+  - Can approve/reject users
+  - Can delete users
+  - Full access to all endpoints
+  - Can modify any field of any user
+
+### Data Modification Policy
+**ONLY ADMINS** can modify user data. Regular users have read-only access to their own profile only.
 
 ## Database Schema
 The system uses a comprehensive user table with extensive financial data collection:
