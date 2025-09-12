@@ -16,7 +16,7 @@ EXCEPTION
 END $$;
 
 DO $$ BEGIN
-    CREATE TYPE users_status_enum AS ENUM ('PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED');
+    CREATE TYPE users_status_enum AS ENUM ('PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED', 'APPROVED');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;

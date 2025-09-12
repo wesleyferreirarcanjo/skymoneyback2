@@ -106,4 +106,11 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   adminApproved?: boolean;
+
+  @IsOptional()
+  adminApprovedAt?: Date;
+
+  @IsOptional()
+  @IsString()
+  adminApprovedBy?: string;
 }

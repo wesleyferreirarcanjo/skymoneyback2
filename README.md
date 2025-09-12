@@ -11,7 +11,8 @@ A comprehensive NestJS application for managing users with financial data, Brazi
 - **Bank Account Management** - Complete banking information storage
 - **Role-based Access Control** - USER/ADMIN roles with different permissions
 - **Admin Approval System** - Pending user approval workflow
-- **User Status Management** - PENDING, ACTIVE, INACTIVE, SUSPENDED states
+- **User Status Management** - PENDING, ACTIVE, INACTIVE, SUSPENDED, APPROVED states
+- **Auto Admin Creation** - Admin user automatically created on application startup
 - **Password Hashing** - Secure password storage with bcrypt
 - **PostgreSQL Database** - Robust data persistence
 
@@ -95,8 +96,18 @@ npm run start:prod
 
 ### Database Management
 - `npm run db:test` - Test database connection and show configuration
+- `npm run db:test-admin` - Test admin user creation
 - `npm run seed` - Run database seed (create admin user)
 - `GET /health` - Health check endpoint with database status
+
+### Default Admin User
+The application automatically creates an admin user on startup:
+- **Email**: admin@skymoney.com
+- **Password**: admin123456
+- **Role**: ADMIN
+- **Status**: APPROVED
+- **PIX Key**: admin@skymoney.com
+- **Admin Approved**: true
 
 ### PgAdmin Access
 When running in development mode:

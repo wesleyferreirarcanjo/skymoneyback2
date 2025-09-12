@@ -17,6 +17,7 @@ export enum UserStatus {
     ACTIVE = 'ACTIVE',
     INACTIVE = 'INACTIVE',
     SUSPENDED = 'SUSPENDED',
+    APPROVED = 'APPROVED',
 }
 
 @Entity('users')
