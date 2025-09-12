@@ -530,7 +530,7 @@ curl -X DELETE http://localhost:3000/queue/QUEUE_UUID_HERE \
 }
 ```
 
-**Note:** When a user is removed from the queue, the queue entry is not deleted. Instead, the `user_id` is set to `null` and the removed user's ID is added to the `passed_user_ids` array for tracking purposes.
+**Note:** When a user is removed from the queue, the queue entry is not deleted. Instead, the `user_id` is set to `null` and the removed user's ID is added to the `passed_user_ids` array for tracking purposes. Duplicate user IDs are allowed in `passed_user_ids` to track multiple removals of the same user.
 
 ### Leave a donation queue
 ```bash
@@ -586,7 +586,7 @@ curl -X GET http://localhost:3000/queue/current-receiver/5 \
 ### Queue States
 - **Position**: Sequential number indicating user's place in queue
 - **is_receiver**: Boolean flag indicating if user is currently receiving
-- **passed_user_ids**: Array of user IDs who previously held this position
+- **passed_user_ids**: Array of user IDs who previously held this position (duplicates allowed for multiple removals)
 - **donation_number**: Number of donations received (count) - organizes queues by donation round
 
 ### Error Handling

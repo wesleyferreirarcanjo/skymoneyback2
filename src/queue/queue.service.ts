@@ -126,10 +126,8 @@ export class QueueService {
         
         // Add the removed user to passed_user_ids
         const passedUserIds = queue.passed_user_ids || [];
-        if (!passedUserIds.includes(userIdToRemove)) {
-            passedUserIds.push(userIdToRemove);
-            queue.passed_user_ids = passedUserIds;
-        }
+        passedUserIds.push(userIdToRemove);
+        queue.passed_user_ids = passedUserIds;
         
         await this.queueRepository.save(queue);
         return { message: 'User successfully removed from queue' };
@@ -153,10 +151,8 @@ export class QueueService {
         
         // Add the removed user to passed_user_ids
         const passedUserIds = queue.passed_user_ids || [];
-        if (!passedUserIds.includes(userId)) {
-            passedUserIds.push(userId);
-            queue.passed_user_ids = passedUserIds;
-        }
+        passedUserIds.push(userId);
+        queue.passed_user_ids = passedUserIds;
         
         await this.queueRepository.save(queue);
         return { message: 'Successfully left the donation queue' };
