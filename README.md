@@ -1,16 +1,30 @@
-# SkyMoneyBack2 - Authentication System
+# SkyMoneyBack2 - Financial User Management System
 
-A NestJS application with JWT-based authentication system supporting user and admin roles.
+A comprehensive NestJS application for managing users with financial data, Brazilian PIX integration, and cryptocurrency support. Features a complete user registration system with extensive financial information collection and admin approval workflow.
 
 ## Features
 
-- JWT Bearer Token Authentication
-- User Registration and Login
-- Role-based Access Control (USER/ADMIN)
-- User Profile Management
-- Admin User Approval System
-- Password Hashing with bcrypt
-- PostgreSQL Database Integration
+- **JWT Bearer Token Authentication** - Secure user authentication
+- **Comprehensive User Registration** - Collects extensive user and financial data
+- **Brazilian PIX Integration** - PIX key management with QR codes and copy-paste functionality
+- **Cryptocurrency Support** - Bitcoin (BTC) and USDT address management
+- **Bank Account Management** - Complete banking information storage
+- **Role-based Access Control** - USER/ADMIN roles with different permissions
+- **Admin Approval System** - Pending user approval workflow
+- **User Status Management** - PENDING, ACTIVE, INACTIVE, SUSPENDED states
+- **Password Hashing** - Secure password storage with bcrypt
+- **PostgreSQL Database** - Robust data persistence
+
+## Use Case
+This system is designed for Brazilian financial applications that need to:
+- Collect comprehensive user financial data for KYC (Know Your Customer) compliance
+- Manage PIX payment integration (Brazil's instant payment system)
+- Support cryptocurrency transactions (Bitcoin and USDT)
+- Implement user approval workflows for financial services
+- Store banking information for payment processing
+- Track user status and admin approval processes
+
+Perfect for fintech applications, payment platforms, cryptocurrency exchanges, or any service requiring extensive user financial data collection in Brazil.
 
 ## Setup
 
@@ -101,11 +115,24 @@ Authorization: Bearer <your-jwt-token>
 - `ADMIN` - Administrator with full access
 
 ## Database Schema
-The system uses a comprehensive user table with fields for:
-- Basic info (name, email, phone)
-- Financial data (PIX, bank details, crypto addresses)
-- Admin approval system
-- User status management
+The system uses a comprehensive user table with extensive financial data collection:
+
+### Personal Information
+- Basic info (firstName, lastName, email, phone)
+- Brazilian CPF and birth date
+- Address information (CEP, address, addressNumber)
+
+### Financial Data
+- **PIX Integration**: PIX key, key type, owner name, copy-paste text, QR code
+- **Banking**: Bank name, agency, account number
+- **Cryptocurrency**: Bitcoin (BTC) and USDT addresses with QR codes
+- **Optional**: Avatar image
+
+### System Management
+- User roles (USER/ADMIN)
+- User status (PENDING/ACTIVE/INACTIVE/SUSPENDED)
+- Admin approval system with approval tracking
+- Timestamps for creation and updates
 
 ## Environment Variables
 ```
@@ -121,15 +148,33 @@ PORT=3000
 
 ## Example API Usage
 
-### Register a new user
+### Register a new user (Complete financial data)
 ```bash
 curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "firstName": "John",
-    "lastName": "Doe",
-    "email": "john@example.com",
-    "phone": "+1234567890",
+    "firstName": "João",
+    "lastName": "Silva",
+    "email": "joao@example.com",
+    "phone": "+5511999999999",
+    "cpf": "12345678901",
+    "birthDate": "1990-01-01",
+    "cep": "01234-567",
+    "address": "Rua das Flores, 123",
+    "addressNumber": "123",
+    "bank": "Banco do Brasil",
+    "agency": "1234",
+    "account": "12345-6",
+    "pixKeyType": "CPF",
+    "pixKey": "12345678901",
+    "pixOwnerName": "João Silva",
+    "pixCopyPaste": "00020126580014br.gov.bcb.pix...",
+    "pixQrCode": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "btcAddress": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+    "btcQrCode": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "usdtAddress": "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE",
+    "usdtQrCode": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "avatar": "https://example.com/avatar.jpg",
     "password": "password123"
   }'
 ```
@@ -139,9 +184,15 @@ curl -X POST http://localhost:3000/auth/register \
 curl -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "john@example.com",
+    "email": "joao@example.com",
     "password": "password123"
   }'
+```
+
+### Admin approve user
+```bash
+curl -X PATCH http://localhost:3000/users/USER_ID/approve \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
 ```
 
 ### Access protected route
