@@ -4,8 +4,8 @@ import {
     ConflictException,
     BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { Repository, In, DataSource } from 'typeorm';
 import { Queue } from './entities/queue.entity';
 import { CreateQueueDto } from './dto/create-queue.dto';
 import { UpdateQueueDto } from './dto/update-queue.dto';
@@ -15,6 +15,8 @@ export class QueueService {
     constructor(
         @InjectRepository(Queue)
         private queueRepository: Repository<Queue>,
+        @InjectDataSource()
+        private dataSource: DataSource,
     ) {}
 
     async create(createQueueDto: CreateQueueDto): Promise<Queue> {
@@ -278,5 +280,309 @@ export class QueueService {
             message: `Successfully swapped positions for users in ${commonDonationNumbers.length} donation queue(s)`,
             updatedQueues
         };
+    }
+
+    /**
+     * Move the current receiver to the end of the queue using a transaction
+     * This is a "godown" operation where the receiver goes to the back
+     */
+    async moveReceiverToEnd(donationNumber: number): Promise<{ message: string; updatedQueues: Queue[] }> {
+        return await this.dataSource.transaction(async (manager) => {
+            // Get current receiver
+            const currentReceiver = await manager.findOne(Queue, {
+                where: {
+                    donation_number: donationNumber,
+                    is_receiver: true,
+                },
+                relations: ['user'],
+            });
+
+            if (!currentReceiver) {
+                throw new NotFoundException('No current receiver found for this donation queue');
+            }
+
+            // Get all queue entries for this donation number, ordered by position
+            const allQueues = await manager.find(Queue, {
+                where: { donation_number: donationNumber },
+                order: { position: 'ASC' },
+                relations: ['user'],
+            });
+
+            if (allQueues.length <= 1) {
+                throw new BadRequestException('Cannot move receiver to end - only one person in queue');
+            }
+
+            // Find the last position
+            const lastPosition = Math.max(...allQueues.map(q => q.position));
+
+            // Update the current receiver to not be receiver anymore
+            currentReceiver.is_receiver = false;
+            currentReceiver.position = lastPosition + 1;
+
+            // Set the next person in line as the new receiver
+            const nextInLine = allQueues.find(q => q.position === currentReceiver.position + 1);
+            if (nextInLine) {
+                nextInLine.is_receiver = true;
+            }
+
+            // Save all changes
+            await manager.save([currentReceiver, nextInLine]);
+
+            // Get updated queue
+            const updatedQueues = await manager.find(Queue, {
+                where: { donation_number: donationNumber },
+                order: { position: 'ASC' },
+                relations: ['user'],
+            });
+
+            return {
+                message: `Successfully moved receiver to end of queue. New receiver is at position ${nextInLine?.position}`,
+                updatedQueues
+            };
+        });
+    }
+
+    /**
+     * Move a user one position up in the queue using a transaction
+     * This is a "godown" operation where users move up one position
+     */
+    async moveUserUpOnePosition(userId: string, donationNumber: number): Promise<{ message: string; updatedQueues: Queue[] }> {
+        return await this.dataSource.transaction(async (manager) => {
+            // Find the user's current position
+            const userQueue = await manager.findOne(Queue, {
+                where: {
+                    user_id: userId,
+                    donation_number: donationNumber,
+                },
+                relations: ['user'],
+            });
+
+            if (!userQueue) {
+                throw new NotFoundException('User not found in this donation queue');
+            }
+
+            // Get all queue entries for this donation number, ordered by position
+            const allQueues = await manager.find(Queue, {
+                where: { donation_number: donationNumber },
+                order: { position: 'ASC' },
+                relations: ['user'],
+            });
+
+            // Find the user above (one position higher)
+            const userAbove = allQueues.find(q => q.position === userQueue.position - 1);
+
+            if (!userAbove) {
+                throw new BadRequestException('User is already at the top of the queue');
+            }
+
+            // Swap positions
+            const tempPosition = userQueue.position;
+            userQueue.position = userAbove.position;
+            userAbove.position = tempPosition;
+
+            // Save both entries
+            await manager.save([userQueue, userAbove]);
+
+            // Get updated queue
+            const updatedQueues = await manager.find(Queue, {
+                where: { donation_number: donationNumber },
+                order: { position: 'ASC' },
+                relations: ['user'],
+            });
+
+            return {
+                message: `Successfully moved user up one position from ${tempPosition} to ${userQueue.position}`,
+                updatedQueues
+            };
+        });
+    }
+
+    /**
+     * Move a user one position down in the queue using a transaction
+     * This is a "godown" operation where users move down one position
+     */
+    async moveUserDownOnePosition(userId: string, donationNumber: number): Promise<{ message: string; updatedQueues: Queue[] }> {
+        return await this.dataSource.transaction(async (manager) => {
+            // Find the user's current position
+            const userQueue = await manager.findOne(Queue, {
+                where: {
+                    user_id: userId,
+                    donation_number: donationNumber,
+                },
+                relations: ['user'],
+            });
+
+            if (!userQueue) {
+                throw new NotFoundException('User not found in this donation queue');
+            }
+
+            // Get all queue entries for this donation number, ordered by position
+            const allQueues = await manager.find(Queue, {
+                where: { donation_number: donationNumber },
+                order: { position: 'ASC' },
+                relations: ['user'],
+            });
+
+            // Find the user below (one position lower)
+            const userBelow = allQueues.find(q => q.position === userQueue.position + 1);
+
+            if (!userBelow) {
+                throw new BadRequestException('User is already at the bottom of the queue');
+            }
+
+            // Swap positions
+            const tempPosition = userQueue.position;
+            userQueue.position = userBelow.position;
+            userBelow.position = tempPosition;
+
+            // Save both entries
+            await manager.save([userQueue, userBelow]);
+
+            // Get updated queue
+            const updatedQueues = await manager.find(Queue, {
+                where: { donation_number: donationNumber },
+                order: { position: 'ASC' },
+                relations: ['user'],
+            });
+
+            return {
+                message: `Successfully moved user down one position from ${tempPosition} to ${userQueue.position}`,
+                updatedQueues
+            };
+        });
+    }
+
+    /**
+     * Get the next person in line to become receiver
+     */
+    async getNextReceiver(donationNumber: number): Promise<Queue | null> {
+        const queues = await this.findByDonationNumber(donationNumber);
+        const currentReceiver = await this.getCurrentReceiver(donationNumber);
+        
+        if (currentReceiver) {
+            return queues.find(q => q.position === currentReceiver.position + 1) || null;
+        } else if (queues.length > 0) {
+            return queues[0];
+        }
+        
+        return null;
+    }
+
+    /**
+     * Advance the queue by making the next person the receiver
+     */
+    async advanceQueue(donationNumber: number): Promise<{ message: string; newReceiver: Queue | null; updatedQueues: Queue[] }> {
+        return await this.dataSource.transaction(async (manager) => {
+            const currentReceiver = await manager.findOne(Queue, {
+                where: {
+                    donation_number: donationNumber,
+                    is_receiver: true,
+                },
+            });
+
+            const nextReceiver = await this.getNextReceiver(donationNumber);
+
+            if (!nextReceiver) {
+                throw new BadRequestException('No next receiver found in queue');
+            }
+
+            // Update current receiver
+            if (currentReceiver) {
+                currentReceiver.is_receiver = false;
+                await manager.save(currentReceiver);
+            }
+
+            // Set next receiver
+            nextReceiver.is_receiver = true;
+            await manager.save(nextReceiver);
+
+            // Get updated queue
+            const updatedQueues = await manager.find(Queue, {
+                where: { donation_number: donationNumber },
+                order: { position: 'ASC' },
+                relations: ['user'],
+            });
+
+            return {
+                message: `Queue advanced. New receiver is at position ${nextReceiver.position}`,
+                newReceiver: nextReceiver,
+                updatedQueues
+            };
+        });
+    }
+
+    /**
+     * Move a specific user to the end of the queue and move everyone else up one position
+     * This is a "godown" operation where the specified user goes to the back
+     */
+    async moveUserToEnd(userId: string, donationNumber: number): Promise<{ message: string; updatedQueues: Queue[] }> {
+        return await this.dataSource.transaction(async (manager) => {
+            // Find the user's current position
+            const userQueue = await manager.findOne(Queue, {
+                where: {
+                    user_id: userId,
+                    donation_number: donationNumber,
+                },
+                relations: ['user'],
+            });
+
+            if (!userQueue) {
+                throw new NotFoundException('User not found in this donation queue');
+            }
+
+            // Get all queue entries for this donation number, ordered by position
+            const allQueues = await manager.find(Queue, {
+                where: { donation_number: donationNumber },
+                order: { position: 'ASC' },
+                relations: ['user'],
+            });
+
+            if (allQueues.length <= 1) {
+                throw new BadRequestException('Cannot move user to end - only one person in queue');
+            }
+
+            // Find the last position
+            const lastPosition = Math.max(...allQueues.map(q => q.position));
+
+            // Store the user's current position
+            const userCurrentPosition = userQueue.position;
+
+            // Move the user to the end
+            userQueue.position = lastPosition + 1;
+
+            // Move everyone who was after the user up one position
+            const queuesToUpdate = allQueues.filter(q => q.position > userCurrentPosition);
+            
+            // Update positions for users who need to move up
+            for (const queue of queuesToUpdate) {
+                queue.position = queue.position - 1;
+            }
+
+            // If the user was the current receiver, set the next person as receiver
+            if (userQueue.is_receiver) {
+                userQueue.is_receiver = false;
+                // Find the new receiver (person at the user's old position)
+                const newReceiver = queuesToUpdate.find(q => q.position === userCurrentPosition);
+                if (newReceiver) {
+                    newReceiver.is_receiver = true;
+                }
+            }
+
+            // Save all changes
+            const allUpdates = [userQueue, ...queuesToUpdate];
+            await manager.save(allUpdates);
+
+            // Get updated queue
+            const updatedQueues = await manager.find(Queue, {
+                where: { donation_number: donationNumber },
+                order: { position: 'ASC' },
+                relations: ['user'],
+            });
+
+            return {
+                message: `Successfully moved user to end of queue from position ${userCurrentPosition} to ${userQueue.position}. ${queuesToUpdate.length} users moved up one position.`,
+                updatedQueues
+            };
+        });
     }
 }

@@ -685,3 +685,204 @@ curl -X GET http://localhost:3000/queue/current-receiver/5 \
 - **400 Bad Request**: Invalid position data, non-sequential positions
 - **401 Unauthorized**: Missing or invalid JWT token
 - **403 Forbidden**: Insufficient permissions for admin-only operations
+
+## Godown Operations - Advanced Queue Management
+
+The system includes advanced "godown" operations for sophisticated queue management with full transaction support. These operations allow administrators to perform complex queue manipulations while maintaining data consistency.
+
+### Godown Endpoints
+
+#### Move Receiver to End
+**POST** `/queue/godown/move-receiver-to-end`
+
+Moves the current receiver to the end of the queue and sets the next person as the new receiver.
+
+```bash
+curl -X POST http://localhost:3000/queue/godown/move-receiver-to-end \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -d '{
+    "donation_number": 5
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "Successfully moved receiver to end of queue. New receiver is at position 2",
+  "updatedQueues": [...]
+}
+```
+
+#### Move User Up One Position
+**POST** `/queue/godown/move-user-up`
+
+Moves a specific user up one position in the queue (swaps with the user above them).
+
+```bash
+curl -X POST http://localhost:3000/queue/godown/move-user-up \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -d '{
+    "user_id": "USER_UUID_HERE",
+    "donation_number": 5
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "Successfully moved user up one position from 3 to 2",
+  "updatedQueues": [...]
+}
+```
+
+#### Move User Down One Position
+**POST** `/queue/godown/move-user-down`
+
+Moves a specific user down one position in the queue (swaps with the user below them).
+
+```bash
+curl -X POST http://localhost:3000/queue/godown/move-user-down \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -d '{
+    "user_id": "USER_UUID_HERE",
+    "donation_number": 5
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "Successfully moved user down one position from 2 to 3",
+  "updatedQueues": [...]
+}
+```
+
+#### Advance Queue
+**POST** `/queue/godown/advance-queue`
+
+Advances the queue by making the next person in line the new receiver.
+
+```bash
+curl -X POST http://localhost:3000/queue/godown/advance-queue \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -d '{
+    "donation_number": 5
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "Queue advanced. New receiver is at position 2",
+  "newReceiver": {...},
+  "updatedQueues": [...]
+}
+```
+
+#### Get Next Receiver
+**GET** `/queue/godown/next-receiver/{donationNumber}`
+
+Gets information about who will be the next receiver in the queue.
+
+```bash
+curl -X GET http://localhost:3000/queue/godown/next-receiver/5 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "id": "queue-uuid-here",
+  "position": 2,
+  "user": {...},
+  "is_receiver": false,
+  "donation_number": 5,
+  "created_at": "2024-01-15T10:35:00.000Z",
+  "updated_at": "2024-01-15T10:35:00.000Z"
+}
+```
+
+#### Move User to End
+**POST** `/queue/godown/move-user-to-end`
+
+Moves a specific user to the end of the queue and moves everyone else up one position.
+
+```bash
+curl -X POST http://localhost:3000/queue/godown/move-user-to-end \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -d '{
+    "user_id": "USER_UUID_HERE",
+    "donation_number": 5
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "Successfully moved user to end of queue from position 2 to 5. 3 users moved up one position.",
+  "updatedQueues": [...]
+}
+```
+
+### Godown Operations Features
+
+#### Transaction Safety
+All godown operations are wrapped in database transactions using TypeORM's `DataSource.transaction()` method, ensuring:
+- **Atomicity**: Either all changes succeed or none do
+- **Consistency**: The queue state remains valid throughout the operation
+- **Isolation**: Concurrent operations don't interfere with each other
+- **Durability**: Changes are permanently saved once the transaction commits
+
+#### Usage Scenarios
+
+**Scenario 1: Move Receiver to End**
+```bash
+# Before: [User1(receiver), User2, User3, User4]
+# After:  [User2(receiver), User3, User4, User1]
+```
+
+**Scenario 2: Move User Up One Position**
+```bash
+# Before: [User1, User2, User3, User4]
+# Move User3 up: [User1, User3, User2, User4]
+```
+
+**Scenario 3: Advance Queue**
+```bash
+# Before: [User1(receiver), User2, User3, User4]
+# After:  [User1, User2(receiver), User3, User4]
+```
+
+**Scenario 4: Move User to End**
+```bash
+# Before: [User1, User2, User3, User4]
+# Move User2 to end: [User1, User3, User4, User2]
+# Everyone after User2 moves up one position
+```
+
+#### Error Handling for Godown Operations
+- **404 Not Found**: No current receiver found, user not found in queue
+- **400 Bad Request**: User already at top/bottom of queue, only one person in queue
+- **401 Unauthorized**: Missing or invalid JWT token
+- **403 Forbidden**: Insufficient permissions (admin only)
+
+#### Authentication & Authorization
+All godown operations require:
+- Valid JWT token
+- Admin role (`UserRole.ADMIN`)
+
+### Godown Operations Summary
+
+| Operation | Endpoint | Description | Admin Only |
+|-----------|----------|-------------|------------|
+| Move Receiver to End | `POST /queue/godown/move-receiver-to-end` | Moves current receiver to end, sets next as receiver | ✅ |
+| Move User Up | `POST /queue/godown/move-user-up` | Moves user up one position (swaps with user above) | ✅ |
+| Move User Down | `POST /queue/godown/move-user-down` | Moves user down one position (swaps with user below) | ✅ |
+| Move User to End | `POST /queue/godown/move-user-to-end` | Moves specific user to end, everyone else moves up | ✅ |
+| Advance Queue | `POST /queue/godown/advance-queue` | Makes next person in line the new receiver | ✅ |
+| Get Next Receiver | `GET /queue/godown/next-receiver/{donationNumber}` | Gets information about next receiver | ❌ |

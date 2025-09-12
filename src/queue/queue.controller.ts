@@ -17,6 +17,7 @@ import {
 import { QueueService } from './queue.service';
 import { CreateQueueDto } from './dto/create-queue.dto';
 import { UpdateQueueDto } from './dto/update-queue.dto';
+import { MoveUserPositionDto, MoveReceiverToEndDto, AdvanceQueueDto, MoveUserToEndDto } from './dto/godown-operations.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -120,5 +121,53 @@ export class QueueController {
         @Param('donationNumber', ParseIntPipe) donationNumber: number,
     ) {
         return this.queueService.removeByUserId(req.user.id, donationNumber);
+    }
+
+    // Godown Operations - Queue Management with Transactions
+
+    @Post('godown/move-receiver-to-end')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    @HttpCode(200)
+    moveReceiverToEnd(@Body() moveReceiverDto: MoveReceiverToEndDto) {
+        return this.queueService.moveReceiverToEnd(moveReceiverDto.donation_number);
+    }
+
+    @Post('godown/move-user-up')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    @HttpCode(200)
+    moveUserUpOnePosition(@Body() moveUserDto: MoveUserPositionDto) {
+        return this.queueService.moveUserUpOnePosition(moveUserDto.user_id, moveUserDto.donation_number);
+    }
+
+    @Post('godown/move-user-down')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    @HttpCode(200)
+    moveUserDownOnePosition(@Body() moveUserDto: MoveUserPositionDto) {
+        return this.queueService.moveUserDownOnePosition(moveUserDto.user_id, moveUserDto.donation_number);
+    }
+
+    @Post('godown/advance-queue')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    @HttpCode(200)
+    advanceQueue(@Body() advanceQueueDto: AdvanceQueueDto) {
+        return this.queueService.advanceQueue(advanceQueueDto.donation_number);
+    }
+
+    @Get('godown/next-receiver/:donationNumber')
+    @UseGuards(JwtAuthGuard)
+    getNextReceiver(@Param('donationNumber', ParseIntPipe) donationNumber: number) {
+        return this.queueService.getNextReceiver(donationNumber);
+    }
+
+    @Post('godown/move-user-to-end')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    @HttpCode(200)
+    moveUserToEnd(@Body() moveUserToEndDto: MoveUserToEndDto) {
+        return this.queueService.moveUserToEnd(moveUserToEndDto.user_id, moveUserToEndDto.donation_number);
     }
 }
