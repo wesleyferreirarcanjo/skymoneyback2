@@ -21,11 +21,12 @@ export class InitService implements OnModuleInit {
       if (!existingAdmin) {
         this.logger.log('Creating admin user...');
         
-        // Hash the password
-        const hashedPassword = await bcrypt.hash('admin123456', 12);
+        // Hash the password with the same salt rounds as the regular create method
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash('admin123456', saltRounds);
         
-        // Create admin user with all required fields
-        const adminUser = await this.usersService.create({
+        // Create admin user with pre-hashed password
+        const adminUser = await this.usersService.createWithHashedPassword({
           firstName: 'Admin',
           lastName: 'SkyMoney',
           email: 'admin@skymoney.com',

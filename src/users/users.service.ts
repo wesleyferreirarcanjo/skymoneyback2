@@ -88,4 +88,21 @@ export class UsersService {
     user.adminApprovedBy = adminId;
     return this.usersRepository.save(user);
   }
+
+  async createWithHashedPassword(userData: Omit<CreateUserDto, 'password'> & { password: string }): Promise<User> {
+    // Check if user already exists
+    const existingUser = await this.usersRepository.findOne({
+      where: [
+        { email: userData.email },
+        { phone: userData.phone },
+      ],
+    });
+
+    if (existingUser) {
+      throw new ConflictException('User with this email or phone already exists');
+    }
+
+    const user = this.usersRepository.create(userData);
+    return this.usersRepository.save(user);
+  }
 }
