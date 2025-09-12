@@ -39,9 +39,17 @@ export class QueueService {
         });
 
         if (positionTaken) {
-            throw new ConflictException('Position is already taken in this donation queue');
+            // If position is taken by an entry with null user_id, update it
+            if (positionTaken.user_id === null) {
+                positionTaken.user_id = createQueueDto.user_id;
+                return this.queueRepository.save(positionTaken);
+            } else {
+                // Position is taken by another user
+                throw new ConflictException('Position is already taken in this donation queue');
+            }
         }
 
+        // Create new queue entry
         const queue = this.queueRepository.create(createQueueDto);
         return this.queueRepository.save(queue);
     }

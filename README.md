@@ -324,6 +324,8 @@ curl -X POST http://localhost:3000/queue \
 }
 ```
 
+**Note:** If the specified position already exists but has an empty `user_id` (from a previously removed user), the new user will be added to that existing position by updating the queue entry instead of creating a new one.
+
 ### Get queue for specific donation count
 ```bash
 curl -X GET http://localhost:3000/queue/donation/5 \
