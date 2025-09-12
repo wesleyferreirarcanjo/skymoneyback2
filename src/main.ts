@@ -24,13 +24,10 @@ async function bootstrap() {
   }));
 
   app.enableCors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, curl, postman, etc.)
-      // and any origin in development/testing
-      callback(null, true);
-    },
+    origin: true, // Allow all origins
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: '*', // Allow all headers
+    allowedHeaders: ['*'], // Allow all headers
+    exposedHeaders: ['*'], // Expose all headers
     credentials: true,
     preflightContinue: false,
     optionsSuccessStatus: 200,
