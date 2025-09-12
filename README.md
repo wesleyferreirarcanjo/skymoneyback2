@@ -184,6 +184,7 @@ When running in development mode:
 - `GET /queue/:id` - Get specific queue entry by ID
 - `PATCH /queue/:id` - Update queue entry (admin only)
 - `PATCH /queue/reorder/:donationNumber` - Reorder queue positions (admin only)
+- `PATCH /queue/swap` - Swap positions between two users in queue (admin only)
 - `DELETE /queue/:id` - Remove queue entry (admin only)
 - `DELETE /queue/leave/:donationNumber` - Leave specific donation count queue
 

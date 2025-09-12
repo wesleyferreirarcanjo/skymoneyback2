@@ -223,4 +223,60 @@ export class QueueService {
 
         return this.findByDonationNumber(donationNumber);
     }
+
+    async swapPositions(firstUserId: string, secondUserId: string): Promise<{ message: string; updatedQueues: Queue[] }> {
+        // Find all queue entries for both users
+        const firstUserQueues = await this.queueRepository.find({
+            where: { user_id: firstUserId },
+            relations: ['user'],
+        });
+
+        const secondUserQueues = await this.queueRepository.find({
+            where: { user_id: secondUserId },
+            relations: ['user'],
+        });
+
+        if (firstUserQueues.length === 0) {
+            throw new NotFoundException(`User ${firstUserId} not found in any queue`);
+        }
+
+        if (secondUserQueues.length === 0) {
+            throw new NotFoundException(`User ${secondUserId} not found in any queue`);
+        }
+
+        // Find queues where both users are present (same donation_number)
+        const commonDonationNumbers = firstUserQueues
+            .map(q => q.donation_number)
+            .filter(donationNumber => 
+                secondUserQueues.some(q => q.donation_number === donationNumber)
+            );
+
+        if (commonDonationNumbers.length === 0) {
+            throw new BadRequestException('Users are not in the same donation queue');
+        }
+
+        // Swap positions in all common donation queues
+        const updatedQueues: Queue[] = [];
+        
+        for (const donationNumber of commonDonationNumbers) {
+            const firstQueue = firstUserQueues.find(q => q.donation_number === donationNumber);
+            const secondQueue = secondUserQueues.find(q => q.donation_number === donationNumber);
+
+            if (firstQueue && secondQueue) {
+                // Swap positions
+                const tempPosition = firstQueue.position;
+                firstQueue.position = secondQueue.position;
+                secondQueue.position = tempPosition;
+
+                // Save both entries
+                await this.queueRepository.save([firstQueue, secondQueue]);
+                updatedQueues.push(firstQueue, secondQueue);
+            }
+        }
+
+        return {
+            message: `Successfully swapped positions for users in ${commonDonationNumbers.length} donation queue(s)`,
+            updatedQueues
+        };
+    }
 }
