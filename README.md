@@ -553,6 +553,60 @@ curl -X PATCH http://localhost:3000/queue/reorder/5 \
 ]
 ```
 
+### Swap positions between two users (Admin only)
+```bash
+curl -X PATCH http://localhost:3000/queue/swap \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -d '{
+    "firstUserId": "USER_UUID_1",
+    "secondUserId": "USER_UUID_2"
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "Successfully swapped positions for users in 2 donation queue(s)",
+  "updatedQueues": [
+    {
+      "id": "queue-uuid-1",
+      "position": 2,
+      "donation_number": 5,
+      "is_receiver": false,
+      "passed_user_ids": [],
+      "user_id": "USER_UUID_1",
+      "created_at": "2024-01-15T10:30:00.000Z",
+      "updated_at": "2024-01-15T11:15:00.000Z",
+      "user": {
+        "id": "USER_UUID_1",
+        "firstName": "João",
+        "lastName": "Silva",
+        "email": "joao@example.com"
+      }
+    },
+    {
+      "id": "queue-uuid-2",
+      "position": 1,
+      "donation_number": 5,
+      "is_receiver": true,
+      "passed_user_ids": [],
+      "user_id": "USER_UUID_2",
+      "created_at": "2024-01-15T10:35:00.000Z",
+      "updated_at": "2024-01-15T11:15:00.000Z",
+      "user": {
+        "id": "USER_UUID_2",
+        "firstName": "Maria",
+        "lastName": "Santos",
+        "email": "maria@example.com"
+      }
+    }
+  ]
+}
+```
+
+**Note:** This endpoint automatically finds all donation queues where both users are present and swaps their positions in all of them. No need to specify donation numbers.
+
 ### Remove queue entry (Admin only)
 ```bash
 curl -X DELETE http://localhost:3000/queue/QUEUE_UUID_HERE \

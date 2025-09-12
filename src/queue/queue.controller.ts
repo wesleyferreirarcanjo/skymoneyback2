@@ -74,6 +74,13 @@ export class QueueController {
         return this.queueService.getCurrentReceiver(donationNumber);
     }
 
+    @Patch('swap')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    swapPositions(@Body() swapData: { firstUserId: string; secondUserId: string }) {
+        return this.queueService.swapPositions(swapData.firstUserId, swapData.secondUserId);
+    }
+
     @Patch('reorder/:donationNumber')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
@@ -82,13 +89,6 @@ export class QueueController {
         @Body() newOrder: { id: string; position: number }[],
     ) {
         return this.queueService.reorderQueue(donationNumber, newOrder);
-    }
-
-    @Patch('swap')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(UserRole.ADMIN)
-    swapPositions(@Body() swapData: { firstUserId: string; secondUserId: string }) {
-        return this.queueService.swapPositions(swapData.firstUserId, swapData.secondUserId);
     }
 
     @Get(':id')
