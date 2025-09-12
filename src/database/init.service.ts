@@ -17,7 +17,7 @@ export class InitService implements OnModuleInit {
     await this.createAdminUser();
     
     // Check if test data generation is requested
-    if (process.env.GENERATE_TEST_DATA === 'true') {
+    if (process.env.GENERATE_TEST_DATA === 'true' || process.env.DATA_GENERATED === 'true') {
       this.logger.log('Test data generation flag detected. Generating 98 test users...');
       await this.dataGeneratorService.generateTestUsers();
     }

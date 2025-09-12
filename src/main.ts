@@ -7,6 +7,11 @@ if (process.argv.includes('--generate-test-data')) {
   process.env.GENERATE_TEST_DATA = 'true';
 }
 
+// Also check for DATA_GENERATED environment variable
+if (process.env.DATA_GENERATED === 'true') {
+  process.env.GENERATE_TEST_DATA = 'true';
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
