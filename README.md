@@ -96,7 +96,6 @@ npm run start:prod
 
 ### Database Management
 - `npm run db:test` - Test database connection and show configuration
-- `npm run db:test-admin` - Test admin user creation
 - `npm run seed` - Run database seed (create admin user)
 - `GET /health` - Health check endpoint with database status
 
