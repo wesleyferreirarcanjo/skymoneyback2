@@ -12,12 +12,17 @@ async function bootstrap() {
     transform: true,
   }));
 
-  // Enable CORS for all origins
   app.enableCors({
-    origin: true, // Allow all origins
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, postman, etc.)
+      // and any origin in development/testing
+      callback(null, true);
+    },
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: '*', // Allow all headers
     credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 200,
   });
 
   const port = process.env.PORT ?? 3000;
