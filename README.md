@@ -17,6 +17,8 @@ A comprehensive NestJS application for managing users with financial data, Brazi
 - **Queue Management System** - Complete donation queue management with position tracking
 - **Receiver Management** - Track and manage current donation receivers
 - **Queue Statistics** - Comprehensive queue analytics and reporting
+- **Admin-Only Queue Management** - Only administrators can add users to donation queues
+- **CORS Configuration** - Full CORS support for cross-origin requests
 - **PostgreSQL Database** - Robust data persistence
 
 ## Use Case
@@ -137,7 +139,7 @@ When running in development mode:
 - `DELETE /users/:id` - Delete user (admin only)
 
 ### Queue Management
-- `POST /queue` - Join a donation queue (authenticated)
+- `POST /queue` - Add user to donation queue (admin only)
 - `GET /queue` - Get all queue entries (admin only)
 - `GET /queue/donation/:donationNumber` - Get queue for specific donation count
 - `GET /queue/my-queues` - Get current user's queue entries
@@ -163,15 +165,19 @@ Authorization: Bearer <your-jwt-token>
   - Can only view their own profile
   - Cannot modify any user data
   - Cannot access other users' data
+  - Cannot add users to donation queues
+  - Can view their own queue positions and leave queues
 - `ADMIN` - Administrator with full access
   - Can modify any user data including sensitive fields
   - Can approve/reject users
   - Can delete users
+  - Can add users to donation queues
+  - Can manage all queue operations
   - Full access to all endpoints
   - Can modify any field of any user
 
 ### Data Modification Policy
-**ONLY ADMINS** can modify user data. Regular users have read-only access to their own profile only.
+**ONLY ADMINS** can modify user data and manage donation queues. Regular users have read-only access to their own profile and can only leave queues they're already in.
 
 ## Database Schema
 The system uses a comprehensive user table with extensive financial data collection:
@@ -288,11 +294,11 @@ curl -X GET http://localhost:3000/users/profile \
 
 **Note**: The `donation_number` field represents the count of donations received (e.g., 5 means this is the 5th donation round). This organizes queues by donation rounds rather than arbitrary identifiers.
 
-### Join a donation queue
+### Add user to donation queue (Admin only)
 ```bash
 curl -X POST http://localhost:3000/queue \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
   -d '{
     "position": 1,
     "donation_number": 5,
@@ -610,7 +616,8 @@ curl -X GET http://localhost:3000/queue/current-receiver/5 \
 - **Passed Users**: Keep track of users who were skipped
 - **Queue Statistics**: Get comprehensive queue analytics
 - **Admin Controls**: Full administrative control over queue management
-- **User Self-Service**: Users can join/leave queues and check positions
+- **Admin-Only Queue Creation**: Only administrators can add users to donation queues
+- **User Self-Service**: Users can view their positions and leave queues
 
 ### Queue States
 - **Position**: Sequential number indicating user's place in queue

@@ -27,7 +27,8 @@ export class QueueController {
     constructor(private readonly queueService: QueueService) {}
 
     @Post()
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     create(@Body() createQueueDto: CreateQueueDto) {
         return this.queueService.create(createQueueDto);
     }
