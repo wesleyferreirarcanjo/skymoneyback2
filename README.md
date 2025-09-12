@@ -148,8 +148,6 @@ When running in development mode:
 - `GET /queue/current-receiver/:donationNumber` - Get current receiver for donation count
 - `GET /queue/:id` - Get specific queue entry by ID
 - `PATCH /queue/:id` - Update queue entry (admin only)
-- `PATCH /queue/set-receiver/:donationNumber/:userId` - Set specific user as receiver (admin only)
-- `PATCH /queue/next-receiver/:donationNumber` - Move to next receiver in queue (admin only)
 - `PATCH /queue/reorder/:donationNumber` - Reorder queue positions (admin only)
 - `DELETE /queue/:id` - Remove queue entry (admin only)
 - `DELETE /queue/leave/:donationNumber` - Leave specific donation count queue
@@ -450,57 +448,6 @@ curl -X GET http://localhost:3000/queue/position/5 \
 }
 ```
 
-### Set specific user as receiver (Admin only)
-```bash
-curl -X PATCH http://localhost:3000/queue/set-receiver/5/USER_UUID_2 \
-  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
-```
-
-**Response:**
-```json
-{
-  "id": "queue-uuid-2",
-  "position": 2,
-  "donation_number": 5,
-  "is_receiver": true,
-  "passed_user_ids": ["USER_UUID_1"],
-  "user_id": "USER_UUID_2",
-  "created_at": "2024-01-15T10:35:00.000Z",
-  "updated_at": "2024-01-15T11:00:00.000Z",
-  "user": {
-    "id": "USER_UUID_2",
-    "firstName": "Maria",
-    "lastName": "Santos",
-    "email": "maria@example.com"
-  }
-}
-```
-
-### Move to next receiver (Admin only)
-```bash
-curl -X PATCH http://localhost:3000/queue/next-receiver/5 \
-  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
-```
-
-**Response:**
-```json
-{
-  "id": "queue-uuid-3",
-  "position": 3,
-  "donation_number": 5,
-  "is_receiver": true,
-  "passed_user_ids": ["USER_UUID_1", "USER_UUID_2"],
-  "user_id": "USER_UUID_3",
-  "created_at": "2024-01-15T10:40:00.000Z",
-  "updated_at": "2024-01-15T11:05:00.000Z",
-  "user": {
-    "id": "USER_UUID_3",
-    "firstName": "Pedro",
-    "lastName": "Costa",
-    "email": "pedro@example.com"
-  }
-}
-```
 
 ### Reorder queue positions (Admin only)
 ```bash

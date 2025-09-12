@@ -86,22 +86,6 @@ export class QueueController {
         return this.queueService.update(id, updateQueueDto);
     }
 
-    @Patch('set-receiver/:donationNumber/:userId')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(UserRole.ADMIN)
-    setReceiver(
-        @Param('donationNumber', ParseIntPipe) donationNumber: number,
-        @Param('userId') userId: string,
-    ) {
-        return this.queueService.setReceiver(donationNumber, userId);
-    }
-
-    @Patch('next-receiver/:donationNumber')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(UserRole.ADMIN)
-    moveToNextReceiver(@Param('donationNumber', ParseIntPipe) donationNumber: number) {
-        return this.queueService.moveToNextReceiver(donationNumber);
-    }
 
     @Patch('reorder/:donationNumber')
     @UseGuards(JwtAuthGuard, RolesGuard)
