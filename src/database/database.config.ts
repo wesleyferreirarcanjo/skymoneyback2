@@ -20,7 +20,7 @@ export const databaseConfig: TypeOrmModuleOptions = {
   database: process.env.DATABASE_NAME || 'skymoneyback',
   entities: [User],
   synchronize: process.env.DATABASE_SYNC === 'true' || process.env.NODE_ENV !== 'production',
-  logging: process.env.NODE_ENV === 'development',
+  logging: false,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
   migrations: ['dist/database/migrations/*.js'],
   migrationsRun: process.env.NODE_ENV === 'production',
