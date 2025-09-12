@@ -74,20 +74,6 @@ export class QueueController {
         return this.queueService.getCurrentReceiver(donationNumber);
     }
 
-    @Get(':id')
-    @UseGuards(JwtAuthGuard)
-    findOne(@Param('id') id: string) {
-        return this.queueService.findOne(id);
-    }
-
-    @Patch(':id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(UserRole.ADMIN)
-    update(@Param('id') id: string, @Body() updateQueueDto: UpdateQueueDto) {
-        return this.queueService.update(id, updateQueueDto);
-    }
-
-
     @Patch('reorder/:donationNumber')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN)
@@ -103,6 +89,19 @@ export class QueueController {
     @Roles(UserRole.ADMIN)
     swapPositions(@Body() swapData: { firstUserId: string; secondUserId: string }) {
         return this.queueService.swapPositions(swapData.firstUserId, swapData.secondUserId);
+    }
+
+    @Get(':id')
+    @UseGuards(JwtAuthGuard)
+    findOne(@Param('id') id: string) {
+        return this.queueService.findOne(id);
+    }
+
+    @Patch(':id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    update(@Param('id') id: string, @Body() updateQueueDto: UpdateQueueDto) {
+        return this.queueService.update(id, updateQueueDto);
     }
 
     @Delete(':id')
