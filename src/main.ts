@@ -2,6 +2,11 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
+// Set environment variable for data generation based on command line arguments
+if (process.argv.includes('--generate-test-data')) {
+  process.env.GENERATE_TEST_DATA = 'true';
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 

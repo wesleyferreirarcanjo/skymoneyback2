@@ -35,6 +35,41 @@ This system is designed for Brazilian financial applications that need to:
 
 Perfect for fintech applications, payment platforms, cryptocurrency exchanges, donation platforms, or any service requiring extensive user financial data collection and queue management in Brazil.
 
+## Test Data Generation
+
+The system includes a test data generation feature that creates 98 variations of user data for testing purposes. This feature excludes the following fields as requested:
+- `pixQrCode`
+- `btcQrCode` 
+- `usdtQrCode`
+- `adminApproved`
+- `status`
+- `role`
+
+### Usage
+
+To generate test data when starting the application, use the `--generate-test-data` flag:
+
+```bash
+# Development with test data generation
+npm run start:dev -- --generate-test-data
+
+# Production with test data generation
+npm run start:prod:test-data
+```
+
+### Generated Data
+
+The system will create 98 test users with:
+- Unique emails (user1@test.com, user2@test.com, etc.)
+- Unique phone numbers (11999990001, 11999990002, etc.)
+- Unique CPF numbers (00000000001, 00000000002, etc.)
+- Varied first names and last names from predefined lists
+- Different banks, PIX key types, and addresses
+- Unique Bitcoin and USDT addresses
+- All users will have `role: USER`, `status: APPROVED`, and `adminApproved: true`
+
+The generation process logs progress every 10 users and provides a final summary of successful creations and any errors.
+
 ## Setup
 
 ### Option 1: Docker (Recommended)

@@ -1,16 +1,26 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { UserRole, UserStatus } from '../users/entities/user.entity';
+import { DataGeneratorService } from './data-generator.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class InitService implements OnModuleInit {
   private readonly logger = new Logger(InitService.name);
 
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly dataGeneratorService: DataGeneratorService,
+  ) {}
 
   async onModuleInit() {
     await this.createAdminUser();
+    
+    // Check if test data generation is requested
+    if (process.env.GENERATE_TEST_DATA === 'true') {
+      this.logger.log('Test data generation flag detected. Generating 98 test users...');
+      await this.dataGeneratorService.generateTestUsers();
+    }
   }
 
   private async createAdminUser() {
