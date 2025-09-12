@@ -13,29 +13,26 @@ export class DataGeneratorService {
     this.logger.log('Starting to generate 98 test users...');
     
     const baseUser = {
-      firstName: 'WESLEY',
-      lastName: 'ARCANJO',
+      firstName: 'WESLEY2',
+      lastName: 'ARCANJO2',
       email: 'wesleyferreirarcanjo@gmail.com',
       phone: '119929308722',
       password: '$2b$10$1ecNtNobEaRpi9D7OhRA1Oc3wQjBXKpMBMMuSgWCLBm8ykA0bV6OC',
-      pixKey: 'wesleyferreirarcanjo@gmail.com',
+      pixKey: 'wesleyferreir2arcanjo@gmail.com',
       cpf: '433126428922',
       birthDate: '1998-04-02',
       cep: '068244402',
-      address: 'Rua Catuaba, Jardim Batista, Embu das Artes - SP',
+      address: 'Rua Catuaba, Jardim Batista,2 Embu das Artes - SP',
       addressNumber: '1172',
-      bank: 'Banco do Brasil',
+      bank: 'Banco do Brasil2',
       agency: '1232132',
       account: '21312313212',
       pixKeyType: 'email',
       pixCopyPaste: '3213123123',
       btcAddress: '1FfmbHfnpaZjKFvyi1okTjJJusN455paPH2',
       usdtAddress: '0x165CD37b4C644C2921454429E7F9358d18A452e14',
-      pixOwnerName: 'WESLEY FERREIRA ARCANJO',
-      role: UserRole.USER,
-      status: UserStatus.APPROVED,
-      adminApproved: true,
-      adminApprovedAt: new Date(),
+      pixOwnerName: 'WESLEY FERREIRA ARCANJO2',
+      // Note: Excluding pixQrCode, btcQrCode, usdtQrCode, adminApproved, status, and role as requested
     };
 
     const firstNames = [
@@ -110,6 +107,11 @@ export class DataGeneratorService {
           pixCopyPaste: `pix${i}@copy.com`,
           btcAddress: `1FfmbHfnpaZjKFvyi1okTjJJusN455paPH${i}`,
           usdtAddress: `0x165CD37b4C644C2921454429E7F9358d18A452e${String(i).padStart(2, '0')}`,
+          // Default values for excluded fields
+          role: UserRole.USER,
+          status: UserStatus.APPROVED,
+          adminApproved: true,
+          adminApprovedAt: new Date(),
         };
 
         await this.usersService.createWithHashedPassword(userData);
