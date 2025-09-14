@@ -23,8 +23,12 @@ export const databaseConfig: TypeOrmModuleOptions = {
   password: process.env.DATABASE_PASSWORD || 'admin123',
   database: process.env.DATABASE_NAME || 'sky-money-ai',
   entities: [User, Queue, Donation],
-  synchronize: true, // Forçado para true para sincronizar novos campos
-  logging: ['query', 'error', 'warn', 'info', 'log', 'schema'], // Logging completo para debug
+  synchronize: process.env.DATABASE_SYNC === 'true' || process.env.NODE_ENV !== 'production',
+  logging: process.env.DATABASE_LOGGING === 'true' 
+    ? ['query', 'error', 'warn', 'info', 'log', 'schema'] 
+    : process.env.NODE_ENV === 'development' 
+      ? ['error', 'warn'] 
+      : false,
   logger: process.env.NODE_ENV === 'development' ? 'advanced-console' : 'simple-console',
   maxQueryExecutionTime: 1000, // Log queries that take more than 1 second
   ssl: false,
