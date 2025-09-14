@@ -17,7 +17,7 @@ export class Queue {
     @Column({ type: 'integer', nullable: false })
     position: number;
 
-    @Column({ type: 'integer', nullable: false, comment: 'Number of donations received (count)' })
+    @Column({ type: 'integer', nullable: false, default: 0, comment: 'Number of donations received (count)' })
     donation_number: number;
 
     @Column({ type: 'boolean', nullable: false, default: false })

@@ -16,11 +16,11 @@ import { Queue } from '../queue/entities/queue.entity';
  */
 export const databaseConfig: TypeOrmModuleOptions = {
   type: 'postgres',
-  host: process.env.DATABASE_HOST || 'localhost',
-  port: parseInt(process.env.DATABASE_PORT) || 5432,
-  username: process.env.DATABASE_USER || 'postgres',
-  password: process.env.DATABASE_PASSWORD || 'password',
-  database: process.env.DATABASE_NAME || 'skymoneyback',
+  host: process.env.DATABASE_HOST || '72.60.59.203',
+  port: parseInt(process.env.DATABASE_PORT) || 5433,
+  username: process.env.DATABASE_USER || 'admin',
+  password: process.env.DATABASE_PASSWORD || 'admin123',
+  database: process.env.DATABASE_NAME || 'sky-money-ai',
   entities: [User, Queue],
   synchronize: process.env.DATABASE_SYNC === 'true' || process.env.NODE_ENV !== 'production',
   logging: process.env.DATABASE_LOGGING === 'true' 
@@ -30,7 +30,7 @@ export const databaseConfig: TypeOrmModuleOptions = {
       : false,
   logger: process.env.NODE_ENV === 'development' ? 'advanced-console' : 'simple-console',
   maxQueryExecutionTime: 1000, // Log queries that take more than 1 second
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: false,
   migrations: ['dist/database/migrations/*.js'],
   migrationsRun: process.env.NODE_ENV === 'production',
   retryAttempts: 3,

@@ -1,39 +1,10 @@
-version: '3.8'
-
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: skymoneyback_postgres_dev
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: skymoneyback
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_dev_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-    networks:
-      - skymoneyback_dev_network
-
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: skymoneyback_pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@skymoneyback.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
-    ports:
-      - "8080:80"
-    depends_on:
-      - postgres
-    networks:
-      - skymoneyback_dev_network
-
-volumes:
-  postgres_dev_data:
-
-networks:
-  skymoneyback_dev_network:
-    driver: bridge
+  # postgres: # Commented out - using remote database
+  #   image: postgres:alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_PASSWORD: postgres
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - ./init.sql:/docker-entrypoint-initdb.d/init.sql

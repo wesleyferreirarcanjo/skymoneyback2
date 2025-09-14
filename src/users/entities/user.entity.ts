@@ -15,6 +15,7 @@ export enum UserRole {
 export enum UserStatus {
     PENDING = 'PENDING',
     ACTIVE = 'ACTIVE',
+    ACTIVE_PARTICIPANT = 'ACTIVE_PARTICIPANT',
     INACTIVE = 'INACTIVE',
     SUSPENDED = 'SUSPENDED',
     APPROVED = 'APPROVED',
