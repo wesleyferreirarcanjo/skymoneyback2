@@ -127,4 +127,7 @@ export class User {
 
     @Column({ type: 'boolean', default: false })
     emailVerified: boolean;
+
+    @Column({ type: 'boolean', default: false })
+    phoneVerified: boolean;
 }
