@@ -121,4 +121,7 @@ export class User {
 
     @Column({ type: 'uuid', nullable: true })
     adminApprovedBy?: string;
+
+    @Column({ type: 'varchar', length: 500, nullable: true })
+    avatar?: string;
 }

@@ -69,6 +69,10 @@ export class RegisterDto {
   @IsString()
   usdtQrCode?: string;
 
+  @IsOptional()
+  @IsString()
+  avatar?: string;
+
   @IsString()
   @MinLength(6)
   password: string;
