@@ -43,3 +43,23 @@ export const databaseConfig: TypeOrmModuleOptions = {
   autoLoadEntities: true,
   keepConnectionAlive: true,
 };
+
+// Debug: Log all environment variables related to database
+console.log('=== DATABASE CONFIG DEBUG ===');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('DATABASE_HOST:', process.env.DATABASE_HOST);
+console.log('DATABASE_PORT:', process.env.DATABASE_PORT);
+console.log('DATABASE_USER:', process.env.DATABASE_USER);
+console.log('DATABASE_PASSWORD:', process.env.DATABASE_PASSWORD ? '[HIDDEN]' : 'undefined');
+console.log('DATABASE_NAME:', process.env.DATABASE_NAME);
+console.log('DATABASE_SYNC:', process.env.DATABASE_SYNC);
+console.log('DATABASE_LOGGING:', process.env.DATABASE_LOGGING);
+console.log('FORCE_SYNC:', process.env.FORCE_SYNC);
+console.log('JWT_SECRET:', process.env.JWT_SECRET ? '[HIDDEN]' : 'undefined');
+console.log('shouldSync (calculated):', shouldSync);
+console.log('Final config host:', databaseConfig.host);
+console.log('Final config port:', databaseConfig.port);
+console.log('Final config database:', databaseConfig.database);
+console.log('Final config synchronize:', databaseConfig.synchronize);
+console.log('Final config migrationsRun:', databaseConfig.migrationsRun);
+console.log('=== END DATABASE CONFIG DEBUG ===');
