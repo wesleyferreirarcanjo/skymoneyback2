@@ -16,7 +16,8 @@ import { Donation } from '../donations/entities/donation.entity';
  * - NODE_ENV: Application environment (development/production)
  */
 // Force synchronization for development
-const shouldSync = process.env.DATABASE_SYNC === 'true' || process.env.NODE_ENV !== 'production';
+// TEMPORARY: Enable sync in production to fix schema mismatch
+const shouldSync = process.env.DATABASE_SYNC === 'true' || process.env.NODE_ENV !== 'production' || process.env.FORCE_SYNC === 'true';
 
 export const databaseConfig: TypeOrmModuleOptions = {
   type: 'postgres',
