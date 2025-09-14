@@ -15,6 +15,9 @@ import { Donation } from '../donations/entities/donation.entity';
  * - DATABASE_LOGGING: Enable TypeORM logging (default: false in production, errors/warnings in development)
  * - NODE_ENV: Application environment (development/production)
  */
+// Force synchronization for development
+const shouldSync = process.env.DATABASE_SYNC === 'true' || process.env.NODE_ENV !== 'production';
+
 export const databaseConfig: TypeOrmModuleOptions = {
   type: 'postgres',
   host: process.env.DATABASE_HOST || '72.60.59.203',
@@ -23,7 +26,7 @@ export const databaseConfig: TypeOrmModuleOptions = {
   password: process.env.DATABASE_PASSWORD || 'admin123',
   database: process.env.DATABASE_NAME || 'sky-money-ai',
   entities: [User, Queue, Donation],
-  synchronize: process.env.DATABASE_SYNC === 'true' || process.env.NODE_ENV !== 'production',
+  synchronize: shouldSync,
   logging: process.env.DATABASE_LOGGING === 'true' 
     ? ['query', 'error', 'warn', 'info', 'log', 'schema'] 
     : process.env.NODE_ENV === 'development' 

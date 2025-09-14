@@ -113,4 +113,17 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   adminApprovedBy?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  emailVerified?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  phoneVerified?: boolean;
+
+  // avatar
+  @IsOptional()
+  @IsString()
+  avatar?: string;
 }
