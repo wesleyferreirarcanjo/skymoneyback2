@@ -124,4 +124,7 @@ export class User {
 
     @Column({ type: 'varchar', length: 500, nullable: true })
     avatar?: string;
+
+    @Column({ type: 'boolean', default: false })
+    emailVerified: boolean;
 }
