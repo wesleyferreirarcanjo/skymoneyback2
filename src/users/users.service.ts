@@ -34,10 +34,38 @@ export class UsersService {
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(createUserDto.password, saltRounds);
 
-    const user = this.usersRepository.create({
-      ...createUserDto,
+    // Only include properties that exist in the User entity
+    const userData = {
+      firstName: createUserDto.firstName,
+      lastName: createUserDto.lastName,
+      email: createUserDto.email,
+      phone: createUserDto.phone,
       password: hashedPassword,
-    });
+      pixKey: createUserDto.pixKey,
+      cpf: createUserDto.cpf,
+      birthDate: createUserDto.birthDate,
+      role: createUserDto.role,
+      status: createUserDto.status,
+      cep: createUserDto.cep,
+      address: createUserDto.address,
+      addressNumber: createUserDto.addressNumber,
+      bank: createUserDto.bank,
+      agency: createUserDto.agency,
+      account: createUserDto.account,
+      pixKeyType: createUserDto.pixKeyType,
+      pixCopyPaste: createUserDto.pixCopyPaste,
+      pixQrCode: createUserDto.pixQrCode,
+      btcAddress: createUserDto.btcAddress,
+      btcQrCode: createUserDto.btcQrCode,
+      usdtAddress: createUserDto.usdtAddress,
+      usdtQrCode: createUserDto.usdtQrCode,
+      pixOwnerName: createUserDto.pixOwnerName,
+      adminApproved: createUserDto.adminApproved,
+      adminApprovedAt: createUserDto.adminApprovedAt,
+      adminApprovedBy: createUserDto.adminApprovedBy,
+    };
+
+    const user = this.usersRepository.create(userData);
 
     return this.usersRepository.save(user);
   }
@@ -103,7 +131,38 @@ async createWithHashedPassword(userData: Omit<CreateUserDto, 'password'> & { pas
       throw new ConflictException('User with this email or phone already exists');
     }
 
-    const user = this.usersRepository.create(userData);
+    // Only include properties that exist in the User entity
+    const userEntityData = {
+      firstName: userData.firstName,
+      lastName: userData.lastName,
+      email: userData.email,
+      phone: userData.phone,
+      password: userData.password,
+      pixKey: userData.pixKey,
+      cpf: userData.cpf,
+      birthDate: userData.birthDate,
+      role: userData.role,
+      status: userData.status,
+      cep: userData.cep,
+      address: userData.address,
+      addressNumber: userData.addressNumber,
+      bank: userData.bank,
+      agency: userData.agency,
+      account: userData.account,
+      pixKeyType: userData.pixKeyType,
+      pixCopyPaste: userData.pixCopyPaste,
+      pixQrCode: userData.pixQrCode,
+      btcAddress: userData.btcAddress,
+      btcQrCode: userData.btcQrCode,
+      usdtAddress: userData.usdtAddress,
+      usdtQrCode: userData.usdtQrCode,
+      pixOwnerName: userData.pixOwnerName,
+      adminApproved: userData.adminApproved,
+      adminApprovedAt: userData.adminApprovedAt,
+      adminApprovedBy: userData.adminApprovedBy,
+    };
+
+    const user = this.usersRepository.create(userEntityData);
     return this.usersRepository.save(user);
   }
 }
