@@ -1,6 +1,7 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { User } from '../users/entities/user.entity';
 import { Queue } from '../queue/entities/queue.entity';
+import { Donation } from '../donations/entities/donation.entity';
 
 /**
  * Database configuration using environment variables
@@ -21,7 +22,7 @@ export const databaseConfig: TypeOrmModuleOptions = {
   username: process.env.DATABASE_USER || 'admin',
   password: process.env.DATABASE_PASSWORD || 'admin123',
   database: process.env.DATABASE_NAME || 'sky-money-ai',
-  entities: [User, Queue],
+  entities: [User, Queue, Donation],
   synchronize: process.env.DATABASE_SYNC === 'true' || process.env.NODE_ENV !== 'production',
   logging: process.env.DATABASE_LOGGING === 'true' 
     ? ['query', 'error', 'warn', 'info', 'log', 'schema'] 

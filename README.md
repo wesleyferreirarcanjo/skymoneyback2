@@ -140,7 +140,136 @@ npm run start:prod
 ### Database Management
 - `npm run db:test` - Test database connection and show configuration
 - `npm run seed` - Run database seed (create admin user)
+- `npm run seed:donations` - Run donations seed with comprehensive test data
 - `GET /health` - Health check endpoint with database status
+
+### Donations Seed Data
+
+The donations seed creates comprehensive test data including:
+
+**Users Created:**
+- 9 test users with different statuses (ACTIVE, ACTIVE_PARTICIPANT, APPROVED, etc.)
+- Including Wesley Ferreira R. Canjo (`wesleyferreirarcanjo@gmail.com`) as a test user
+
+**Donations Created:**
+- **15 total donations** covering all possible statuses:
+  - 4 PENDING_PAYMENT (awaiting payment)
+  - 3 PENDING_CONFIRMATION (awaiting receiver confirmation)
+  - 4 CONFIRMED (completed donations)
+  - 2 EXPIRED (deadline passed)
+  - 2 CANCELLED (cancelled donations)
+
+**Donation Types Included:**
+- PULL, CASCADE_N1, UPGRADE_N2, REINJECTION_N2
+- UPGRADE_N3, REINFORCEMENT_N3, ADM_N3, FINAL_PAYMENT_N3
+
+**Realistic Scenarios:**
+- Random creation dates within the last 7 days
+- Appropriate deadlines for each status
+- Comprovante URLs for donations with payment proofs
+- Completed dates for confirmed donations
+- Descriptive notes for each donation
+
+**Wesley Ferreira R. Canjo Specific Data:**
+- **PENDING_PAYMENT**: R$ 250 donation to João Silva (PULL type)
+- **PENDING_CONFIRMATION**: R$ 180 donation from Maria Santos (CASCADE_N1 type)
+- **CONFIRMED**: R$ 400 donation to Pedro Oliveira (UPGRADE_N2 type)
+
+This seed provides a complete testing environment for all donation workflow scenarios.
+
+## Admin Donations Management
+
+The system includes comprehensive admin endpoints for managing all donations across the platform:
+
+### Admin Endpoints
+
+**Authentication Required:** Admin role (`UserRole.ADMIN`)
+**Base URL:** `/donations/admin/`
+
+#### 1. List All Donations
+```
+GET /donations/admin/list
+```
+**Query Parameters:**
+- `page` (number): Page number (default: 1)
+- `limit` (number): Items per page (default: 20)
+- `status` (string): Filter by donation status
+- `type` (string): Filter by donation type
+- `donorId` (string): Filter by donor ID
+- `receiverId` (string): Filter by receiver ID
+- `dateFrom` (string): Filter from date (YYYY-MM-DD)
+- `dateTo` (string): Filter to date (YYYY-MM-DD)
+- `minAmount` (number): Minimum donation amount
+- `maxAmount` (number): Maximum donation amount
+
+**Response:** Returns paginated list with statistics
+
+#### 2. Donation Statistics
+```
+GET /donations/admin/stats
+```
+**Query Parameters:** Same filters as list endpoint
+
+**Response:**
+```json
+{
+  "totalDonations": 15,
+  "totalAmount": 4270.00,
+  "pendingPayment": 4,
+  "pendingConfirmation": 3,
+  "confirmed": 4,
+  "expired": 2,
+  "cancelled": 2,
+  "totalUsersWithDonations": 9,
+  "averageDonationAmount": 284.67
+}
+```
+
+#### 3. Donation Details
+```
+GET /donations/admin/:id
+```
+**Response:** Complete donation details including all fields
+
+### Security Features
+
+- **Role-based Access Control**: Only admin users can access these endpoints
+- **JWT Authentication**: Required for all admin operations
+- **Input Validation**: All query parameters are validated
+- **SQL Injection Protection**: Uses parameterized queries
+
+### Example Usage
+
+```bash
+# Get all donations (admin only)
+GET /donations/admin/list?page=1&limit=10
+
+# Get only confirmed donations
+GET /donations/admin/list?status=CONFIRMED
+
+# Get donations by Wesley Ferreira
+GET /donations/admin/list?donorId=wesley-user-id
+
+# Get statistics for last month
+GET /donations/admin/stats?dateFrom=2024-01-01&dateTo=2024-01-31
+
+# Get donation details
+GET /donations/admin/donation-uuid-here
+```
+
+### Frontend Integration
+
+For frontend integration, these endpoints provide:
+
+1. **Complete Donation Overview**: See all donations across the platform
+2. **Advanced Filtering**: Filter by any combination of criteria
+3. **Real-time Statistics**: Get instant statistics with filters applied
+4. **Detailed Information**: Access all donation details including private fields
+5. **Pagination Support**: Handle large datasets efficiently
+
+### Test File
+
+Use `test-donations-admin.http` file for testing all admin endpoints with proper authentication.
 
 ### Default Admin User
 The application automatically creates an admin user on startup:

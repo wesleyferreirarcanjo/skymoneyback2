@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { QueueModule } from './queue/queue.module';
 import { DatabaseModule } from './database/database.module';
+import { DonationsModule } from './donations/donations.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { DatabaseModule } from './database/database.module';
     UsersModule,
     QueueModule,
     AuthModule,
+    DonationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -26,7 +26,22 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Request() req, @Body() loginDto: LoginDto) {
-    return this.authService.login(req.user);
+    console.log(`[DEBUG] AuthController - Login endpoint called with:`, {
+      email: loginDto.email,
+      password: '[HIDDEN]'
+    });
+
+    console.log(`[DEBUG] AuthController - User from LocalAuthGuard:`, req.user ? {
+      id: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+      status: req.user.status
+    } : 'undefined');
+
+    const result = await this.authService.login(req.user);
+
+    console.log(`[DEBUG] AuthController - Login response created successfully`);
+    return result;
   }
 
   @UseGuards(JwtAuthGuard)

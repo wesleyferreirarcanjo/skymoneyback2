@@ -9,14 +9,14 @@ async function seed() {
 
     try {
         // Check if admin already exists
-        const existingAdmin = await usersService.findByEmail('admin@skymoneyback.com');
+        const existingAdmin = await usersService.findByEmail('admin@skymoney.com');
 
         if (!existingAdmin) {
             // Create admin user
             const adminUser = await usersService.create({
                 firstName: 'System',
                 lastName: 'Administrator',
-                email: 'admin@skymoneyback.com',
+                email: 'admin@skymoney.com',
                 phone: '+5511999999999',
                 password: 'admin123456',
                 role: UserRole.ADMIN,

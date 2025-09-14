@@ -11,14 +11,18 @@ export class AppController {
 
   @Get()
   getHello(): string {
+    console.log(`[DEBUG] AppController - getHello called`);
     return this.appService.getHello();
   }
 
   @Get('health')
   async getHealth() {
+    console.log(`[DEBUG] AppController - getHealth called`);
+
     const dbStatus = await this.databaseService.getConnectionStatus();
-    
-    return {
+    console.log(`[DEBUG] AppController - Database status:`, dbStatus);
+
+    const response = {
       status: dbStatus.connected ? 'ok' : 'error',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
@@ -29,5 +33,8 @@ export class AppController {
         database: dbStatus.database,
       },
     };
+
+    console.log(`[DEBUG] AppController - Health response:`, response);
+    return response;
   }
 }
