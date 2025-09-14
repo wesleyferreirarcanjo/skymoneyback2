@@ -126,4 +126,24 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   avatar?: string;
+
+  // emailVerificationCode 
+  @IsOptional()
+  @IsString()
+  emailVerificationCode?: string;
+
+  // phoneVerificationCode
+  @IsOptional()
+  @IsString()
+  phoneVerificationCode?: string;
+
+  // emailVerificationCodeExpiresAt
+  @IsOptional()
+  @IsDateString()
+  emailVerificationCodeExpiresAt?: string;
+
+  // phoneVerificationCodeExpiresAt
+  @IsOptional()
+  @IsDateString()
+  phoneVerificationCodeExpiresAt?: string;
 }

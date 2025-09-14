@@ -90,7 +90,7 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  async createWithHashedPassword(userData: Omit<CreateUserDto, 'password'> & { password: string }): Promise<User> {
+async createWithHashedPassword(userData: Omit<CreateUserDto, 'password'> & { password: string }): Promise<User> {
     // Check if user already exists
     const existingUser = await this.usersRepository.findOne({
       where: [

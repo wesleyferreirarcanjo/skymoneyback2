@@ -130,4 +130,16 @@ export class User {
 
     @Column({ type: 'boolean', default: false })
     phoneVerified: boolean;
+    
+    @Column({ type: 'varchar', length: 500, nullable: true })
+    emailVerificationCode?: string;
+
+    @Column({ type: 'varchar', length: 500, nullable: true })
+    phoneVerificationCode?: string;
+
+    @Column({ type: 'timestamp', nullable: true })
+    emailVerificationCodeExpiresAt?: Date;
+    
+    @Column({ type: 'timestamp', nullable: true })
+    phoneVerificationCodeExpiresAt?: Date;
 }
