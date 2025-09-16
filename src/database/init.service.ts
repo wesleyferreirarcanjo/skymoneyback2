@@ -33,7 +33,7 @@ export class InitService implements OnModuleInit {
         
         // Hash the password with the same salt rounds as the regular create method
         const saltRounds = 10;
-        const hashedPassword = await bcrypt.hash('admin123456', saltRounds);
+        const hashedPassword = await bcrypt.hash('admin@9162025', saltRounds);
         
         // Create admin user with pre-hashed password
         const adminUser = await this.usersService.createWithHashedPassword({
