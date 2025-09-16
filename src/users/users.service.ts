@@ -60,6 +60,7 @@ export class UsersService {
       usdtAddress: createUserDto.usdtAddress,
       usdtQrCode: createUserDto.usdtQrCode,
       pixOwnerName: createUserDto.pixOwnerName,
+      avatar: createUserDto.avatar,
       adminApproved: createUserDto.adminApproved,
       adminApprovedAt: createUserDto.adminApprovedAt,
       adminApprovedBy: createUserDto.adminApprovedBy,

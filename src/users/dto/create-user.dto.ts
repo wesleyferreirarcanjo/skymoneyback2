@@ -104,6 +104,10 @@ export class CreateUserDto {
   pixOwnerName?: string;
 
   @IsOptional()
+  @IsString()
+  avatar?: string;
+
+  @IsOptional()
   @IsBoolean()
   adminApproved?: boolean;
 

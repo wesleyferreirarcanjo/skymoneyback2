@@ -38,6 +38,9 @@ export class User {
     @Column({ type: 'varchar', length: 20, unique: true })
     phone: string;
 
+    @Column({ type: 'text', nullable: true })
+    avatar?: string;
+
     @Column({ type: 'varchar', length: 255 })
     @Exclude()
     password: string;
