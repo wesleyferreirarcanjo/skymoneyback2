@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { AppModule } from './app.module';
+import { json, urlencoded } from 'express';
 
 // Set environment variable for data generation based on command line arguments
 if (process.argv.includes('--generate-test-data')) {
@@ -16,6 +17,10 @@ if (process.env.DATA_GENERATED === 'true') {
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Increase body payload size limits (default ~100kb -> now 300kb)
+  app.use(json({ limit: '300kb' }));
+  app.use(urlencoded({ limit: '300kb', extended: true }));
 
   // Serve static files for uploads
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
