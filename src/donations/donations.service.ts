@@ -10,7 +10,7 @@ import { Repository, DataSource } from 'typeorm';
 import { Donation, DonationStatus, DonationType } from './entities/donation.entity';
 import { User } from '../users/entities/user.entity';
 import { FileUploadService } from '../common/services/file-upload.service';
-import { DonationsBusinessService } from './donations-business.service';
+import { QueueService } from '../queue/queue.service';
 import {
     DonationStatsDto,
     DonationToSendDto,
@@ -50,7 +50,7 @@ export class DonationsService {
         private usersRepository: Repository<User>,
         private dataSource: DataSource,
         private fileUploadService: FileUploadService,
-        private donationsBusinessService: DonationsBusinessService,
+        private queueService: QueueService,
     ) {}
 
     /**
@@ -297,7 +297,7 @@ export class DonationsService {
         await this.donationsRepository.save(donation);
 
         // Trigger business rules for this donation type
-        await this.donationsBusinessService.processDonationConfirmation(donation);
+        await this.processDonationConfirmation(donation);
 
         // TODO: Implementar notificação para o doador
 
@@ -334,6 +334,78 @@ export class DonationsService {
         return {
             comprovanteUrl: donation.comprovante_url,
         };
+    }
+
+    /**
+     * Process business rules after a donation is confirmed
+     * Inlined from former DonationsBusinessService
+     */
+    async processDonationConfirmation(donation: Donation): Promise<void> {
+        try {
+            switch (donation.type) {
+                case DonationType.PULL:
+                    await this.processPullDonation(donation);
+                    break;
+                case DonationType.CASCADE_N1:
+                    await this.processCascadeN1Donation(donation);
+                    break;
+                case DonationType.UPGRADE_N2:
+                    await this.processUpgradeN2Donation(donation);
+                    break;
+                case DonationType.REINJECTION_N2:
+                    await this.processReinjectionN2Donation(donation);
+                    break;
+                case DonationType.UPGRADE_N3:
+                    await this.processUpgradeN3Donation(donation);
+                    break;
+                case DonationType.REINFORCEMENT_N3:
+                    await this.processReinforcementN3Donation(donation);
+                    break;
+                case DonationType.ADM_N3:
+                    await this.processAdmN3Donation(donation);
+                    break;
+                case DonationType.FINAL_PAYMENT_N3:
+                    await this.processFinalPaymentN3Donation(donation);
+                    break;
+                default:
+                    this.logger.warn(`Unknown donation type: ${donation.type}`);
+            }
+        } catch (error) {
+            this.logger.error(`Error processing business rules for donation ${donation.id}:`, error);
+        }
+    }
+
+    // Business rule handlers (currently placeholders)
+    private async processPullDonation(donation: Donation): Promise<void> {
+        // TODO: Implement specific business logic for PULL donations
+    }
+
+    private async processCascadeN1Donation(donation: Donation): Promise<void> {
+        // TODO: Implement specific business logic for CASCADE_N1 donations
+    }
+
+    private async processUpgradeN2Donation(donation: Donation): Promise<void> {
+        // TODO: Implement specific business logic for UPGRADE_N2 donations
+    }
+
+    private async processReinjectionN2Donation(donation: Donation): Promise<void> {
+        // TODO: Implement specific business logic for REINJECTION_N2 donations
+    }
+
+    private async processUpgradeN3Donation(donation: Donation): Promise<void> {
+        // TODO: Implement specific business logic for UPGRADE_N3 donations
+    }
+
+    private async processReinforcementN3Donation(donation: Donation): Promise<void> {
+        // TODO: Implement specific business logic for REINFORCEMENT_N3 donations
+    }
+
+    private async processAdmN3Donation(donation: Donation): Promise<void> {
+        // TODO: Implement specific business logic for ADM_N3 donations
+    }
+
+    private async processFinalPaymentN3Donation(donation: Donation): Promise<void> {
+        // TODO: Implement specific business logic for FINAL_PAYMENT_N3 donations
     }
 
     /**
@@ -1014,5 +1086,71 @@ export class DonationsService {
             deadline: donation.deadline || undefined,
             notes: donation.notes || undefined,
         };
+    }
+
+    /**
+     * Generate initial pending donations for a 100-user queue following the pattern:
+     * #1 receives from #2,#3,#4; #2 from #5,#6,#7; ...; #33 from #98,#99,#100
+     * Only executes when exactly 100 users are present for the given donationNumber.
+     */
+    async generateCycleDonations(
+        donationNumber: number,
+        donorsCount: number,
+        amount: number,
+        type?: DonationType,
+        deadlineDays?: number,
+    ): Promise<{ createdCount: number; skippedExisting: number; receiversProcessed: number }> {
+        const queue = await this.queueService.findByDonationNumber(donationNumber);
+        if (queue.length !== 100) {
+            throw new BadRequestException('Queue must have exactly 100 users to start the cycle');
+        }
+
+        const ordered = [...queue].sort((a, b) => a.position - b.position);
+
+        let createdCount = 0;
+        let skippedExisting = 0;
+        let receiversProcessed = 0;
+
+        // Fixed mapping per spec: receivers 1..33, donors are 3*r-1, 3*r, 3*r+1
+        const maxReceivers = 33;
+        for (let r = 1; r <= maxReceivers; r++) {
+            const receiverEntry = ordered.find(q => q.position === r);
+            if (!receiverEntry || !receiverEntry.user_id) continue;
+            const receiverId = receiverEntry.user_id;
+
+            const donorsPositions = [3 * r - 1, 3 * r, 3 * r + 1];
+            for (const pos of donorsPositions) {
+                const donorEntry = ordered.find(q => q.position === pos);
+                if (!donorEntry || !donorEntry.user_id) continue;
+
+                // Idempotency: skip if a pending/awaiting donation already exists
+                const existing = await this.donationsRepository.findOne({
+                    where: [
+                        { donor_id: donorEntry.user_id, receiver_id: receiverId, status: DonationStatus.PENDING_PAYMENT },
+                        { donor_id: donorEntry.user_id, receiver_id: receiverId, status: DonationStatus.PENDING_CONFIRMATION },
+                    ],
+                });
+                if (existing) {
+                    skippedExisting++;
+                    continue;
+                }
+
+                const deadline = deadlineDays ? new Date(Date.now() + deadlineDays * 24 * 60 * 60 * 1000) : undefined;
+                const donation = this.donationsRepository.create({
+                    donor_id: donorEntry.user_id,
+                    receiver_id: receiverId,
+                    amount,
+                    type: type || DonationType.PULL,
+                    status: DonationStatus.PENDING_PAYMENT,
+                    deadline,
+                });
+                await this.donationsRepository.save(donation);
+                createdCount++;
+            }
+
+            receiversProcessed++;
+        }
+
+        return { createdCount, skippedExisting, receiversProcessed };
     }
 }
