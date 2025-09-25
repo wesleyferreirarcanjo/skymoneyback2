@@ -1106,6 +1106,8 @@ export class DonationsService {
         }
 
         const ordered = [...queue].sort((a, b) => a.position - b.position);
+        const minPosition = ordered[0]?.position ?? 1;
+        const isZeroBased = minPosition === 0;
 
         let createdCount = 0;
         let skippedExisting = 0;
@@ -1113,12 +1115,16 @@ export class DonationsService {
 
         // Fixed mapping per spec: receivers 1..33, donors are 3*r-1, 3*r, 3*r+1
         const maxReceivers = 33;
-        for (let r = 1; r <= maxReceivers; r++) {
+        const receiverStart = isZeroBased ? 0 : 1;
+        const receiverEnd = isZeroBased ? 32 : 33;
+        for (let r = receiverStart; r <= receiverEnd; r++) {
             const receiverEntry = ordered.find(q => q.position === r);
             if (!receiverEntry || !receiverEntry.user_id) continue;
             const receiverId = receiverEntry.user_id;
 
-            const donorsPositions = [3 * r - 1, 3 * r, 3 * r + 1];
+            const donorsPositions = isZeroBased
+                ? [3 * r + 1, 3 * r + 2, 3 * r + 3]
+                : [3 * r - 1, 3 * r, 3 * r + 1];
             for (const pos of donorsPositions) {
                 const donorEntry = ordered.find(q => q.position === pos);
                 if (!donorEntry || !donorEntry.user_id) continue;
