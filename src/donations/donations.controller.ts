@@ -101,12 +101,13 @@ export class DonationsController {
         @Param('id') donationId: string,
         @Request() req,
         @UploadedFile() file: any,
+        @Body('comprovanteBase64') comprovanteBase64?: string,
     ): Promise<ComprovanteUploadResponseDto> {
-        if (!file) {
-            throw new BadRequestException('Arquivo de comprovante é obrigatório');
+        if (!file && !comprovanteBase64) {
+            throw new BadRequestException('Comprovante é obrigatório (arquivo ou base64)');
         }
 
-        return this.donationsService.uploadComprovante(donationId, req.user.id, file);
+        return this.donationsService.uploadComprovante(donationId, req.user.id, file, comprovanteBase64);
     }
 
     /**

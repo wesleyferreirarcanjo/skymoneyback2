@@ -228,7 +228,8 @@ export class DonationsService {
     async uploadComprovante(
         donationId: string,
         userId: string,
-        file: any,
+        file?: any,
+        comprovanteBase64?: string,
     ): Promise<ComprovanteUploadResponseDto> {
         const donation = await this.donationsRepository.findOne({
             where: { id: donationId },
@@ -252,8 +253,15 @@ export class DonationsService {
             await this.fileUploadService.deleteFile(donation.comprovante_url);
         }
 
-        // Upload new file
-        const comprovanteUrl = await this.fileUploadService.uploadFile(file, donationId);
+        // Upload new comprovante (file or base64)
+        let comprovanteUrl: string;
+        if (comprovanteBase64) {
+            comprovanteUrl = await this.fileUploadService.uploadBase64(comprovanteBase64, donationId);
+        } else if (file) {
+            comprovanteUrl = await this.fileUploadService.uploadFile(file, donationId);
+        } else {
+            throw new BadRequestException('Comprovante é obrigatório');
+        }
 
         donation.comprovante_url = comprovanteUrl;
         donation.status = DonationStatus.PENDING_CONFIRMATION;

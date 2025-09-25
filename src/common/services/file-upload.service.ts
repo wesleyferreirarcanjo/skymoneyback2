@@ -37,6 +37,56 @@ export class FileUploadService {
     }
 
     /**
+     * Upload a base64-encoded image (optionally data URL format) and return its URL
+     */
+    async uploadBase64(
+        base64Data: string,
+        subfolder: string = '',
+    ): Promise<string> {
+        if (!base64Data || typeof base64Data !== 'string') {
+            throw new BadRequestException('Base64 inválido');
+        }
+
+        // Support data URL or raw base64 with explicit mime
+        let mimeType: string | undefined;
+        let dataPart = base64Data;
+        const dataUrlMatch = base64Data.match(/^data:(.*?);base64,(.*)$/);
+        if (dataUrlMatch) {
+            mimeType = dataUrlMatch[1];
+            dataPart = dataUrlMatch[2];
+        }
+
+        const buffer = Buffer.from(dataPart, 'base64');
+        if (buffer.length === 0) {
+            throw new BadRequestException('Conteúdo base64 vazio');
+        }
+
+        // Infer extension from mime
+        if (!mimeType) {
+            // default to image/png if not provided
+            mimeType = 'image/png';
+        }
+
+        if (!this.allowedMimeTypes.includes(mimeType)) {
+            throw new BadRequestException('Tipo de arquivo não permitido. Apenas JPG e PNG são aceitos');
+        }
+
+        if (buffer.length > this.maxFileSize) {
+            throw new BadRequestException('Arquivo muito grande. Máximo 5MB permitido');
+        }
+
+        const extension = mimeType === 'image/png' ? '.png' : '.jpg';
+        const fileName = this.generateUniqueFileName(`upload${extension}`);
+        const relativePath = path.join('comprovantes', subfolder, fileName);
+        const fullPath = path.join(this.uploadDir, subfolder, fileName);
+
+        await this.ensureDirectoryExists(path.dirname(fullPath));
+        await fs.writeFile(fullPath, buffer);
+
+        return `/uploads/${relativePath.replace(/\\/g, '/')}`;
+    }
+
+    /**
      * Delete a file by its relative path
      */
     async deleteFile(relativePath: string): Promise<void> {
