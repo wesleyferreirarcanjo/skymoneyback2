@@ -248,17 +248,48 @@ export class DonationsService {
             throw new BadRequestException('Esta doação não está aguardando pagamento');
         }
 
-        // Delete old comprovante if exists
-        if (donation.comprovante_url) {
+        // If previously stored as filesystem path, try to delete
+        if (donation.comprovante_url && donation.comprovante_url.startsWith('/uploads/')) {
             await this.fileUploadService.deleteFile(donation.comprovante_url);
         }
 
-        // Upload new comprovante (file or base64)
+        // Store comprovante as base64 (data URL). If file provided, convert to base64; if base64 provided, normalize and validate.
         let comprovanteUrl: string;
         if (comprovanteBase64) {
-            comprovanteUrl = await this.fileUploadService.uploadBase64(comprovanteBase64, donationId);
+            // Accept either raw base64 or data URL
+            const dataUrlMatch = comprovanteBase64.match(/^data:(.*?);base64,(.*)$/);
+            let mimeType = 'image/png';
+            let dataPart = comprovanteBase64;
+            if (dataUrlMatch) {
+                mimeType = dataUrlMatch[1];
+                dataPart = dataUrlMatch[2];
+            }
+
+            // Validate mime and size
+            const allowed = ['image/jpeg', 'image/png', 'image/jpg'];
+            if (!allowed.includes(mimeType)) {
+                throw new BadRequestException('Tipo de arquivo não permitido. Apenas JPG e PNG são aceitos');
+            }
+            const buffer = Buffer.from(dataPart, 'base64');
+            const maxSize = 5 * 1024 * 1024;
+            if (buffer.length > maxSize) {
+                throw new BadRequestException('Arquivo muito grande. Máximo 5MB permitido');
+            }
+            comprovanteUrl = `data:${mimeType};base64,${dataPart}`;
         } else if (file) {
-            comprovanteUrl = await this.fileUploadService.uploadFile(file, donationId);
+            // Validate using existing rules
+            const fakeFile = { mimetype: file.mimetype, size: file.size, originalname: file.originalname, buffer: file.buffer };
+            // Reuse validation logic indirectly by creating data URL if mimetype allowed and size ok
+            const allowed = ['image/jpeg', 'image/png', 'image/jpg'];
+            if (!allowed.includes(fakeFile.mimetype)) {
+                throw new BadRequestException('Tipo de arquivo não permitido. Apenas JPG e PNG são aceitos');
+            }
+            const maxSize = 5 * 1024 * 1024;
+            if (fakeFile.size > maxSize) {
+                throw new BadRequestException('Arquivo muito grande. Máximo 5MB permitido');
+            }
+            const base64 = file.buffer.toString('base64');
+            comprovanteUrl = `data:${file.mimetype};base64,${base64}`;
         } else {
             throw new BadRequestException('Comprovante é obrigatório');
         }
@@ -337,8 +368,7 @@ export class DonationsService {
             throw new NotFoundException('Comprovante não encontrado');
         }
 
-        // TODO: Gerar URL assinada temporária para o arquivo
-        // Por enquanto, retornamos a URL direta
+        // Now `comprovante_url` stores a data URL (base64). Return directly.
         return {
             comprovanteUrl: donation.comprovante_url,
         };
