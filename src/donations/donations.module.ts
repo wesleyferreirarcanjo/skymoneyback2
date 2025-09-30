@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { MulterModule } from '@nestjs/platform-express';
 import { DonationsService } from './donations.service';
 import { DonationsController } from './donations.controller';
+import { AdminDonationsController } from './admin-donations.controller';
 import { Donation } from './entities/donation.entity';
 import { User } from '../users/entities/user.entity';
 import { FileUploadService } from '../common/services/file-upload.service';
@@ -25,7 +26,7 @@ import { QueueModule } from '../queue/queue.module';
             },
         }),
     ],
-    controllers: [DonationsController],
+    controllers: [DonationsController, AdminDonationsController],
     providers: [
         DonationsService,
         FileUploadService,
