@@ -9,12 +9,14 @@ import * as bcrypt from 'bcrypt';
 import { User, UserStatus } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { FileUploadService } from '../common/services/file-upload.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    private fileUploadService: FileUploadService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -164,6 +166,36 @@ async createWithHashedPassword(userData: Omit<CreateUserDto, 'password'> & { pas
     };
 
     const user = this.usersRepository.create(userEntityData);
+    return this.usersRepository.save(user);
+  }
+
+  async updateAvatar(id: string, base64Image: string): Promise<User> {
+    const user = await this.findOne(id);
+    
+    // Delete old avatar if exists
+    if (user.avatar) {
+      await this.fileUploadService.deleteFile(user.avatar);
+    }
+
+    // Upload new avatar
+    const avatarUrl = await this.fileUploadService.uploadAvatarBase64(base64Image);
+    user.avatar = avatarUrl;
+    
+    return this.usersRepository.save(user);
+  }
+
+  async updateAvatarFile(id: string, file: any): Promise<User> {
+    const user = await this.findOne(id);
+    
+    // Delete old avatar if exists
+    if (user.avatar) {
+      await this.fileUploadService.deleteFile(user.avatar);
+    }
+
+    // Upload new avatar
+    const avatarUrl = await this.fileUploadService.uploadAvatar(file);
+    user.avatar = avatarUrl;
+    
     return this.usersRepository.save(user);
   }
 }
