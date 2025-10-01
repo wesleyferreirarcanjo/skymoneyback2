@@ -6,3 +6,4 @@ export class UploadAvatarDto {
   avatar: string; // Base64 encoded image
 }
 
+

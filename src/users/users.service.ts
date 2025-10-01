@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -9,14 +10,12 @@ import * as bcrypt from 'bcrypt';
 import { User, UserStatus } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { FileUploadService } from '../common/services/file-upload.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
-    private fileUploadService: FileUploadService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -172,14 +171,11 @@ async createWithHashedPassword(userData: Omit<CreateUserDto, 'password'> & { pas
   async updateAvatar(id: string, base64Image: string): Promise<User> {
     const user = await this.findOne(id);
     
-    // Delete old avatar if exists
-    if (user.avatar) {
-      await this.fileUploadService.deleteFile(user.avatar);
-    }
-
-    // Upload new avatar
-    const avatarUrl = await this.fileUploadService.uploadAvatarBase64(base64Image);
-    user.avatar = avatarUrl;
+    // Validate base64 image
+    this.validateBase64Image(base64Image);
+    
+    // Save base64 image directly to database
+    user.avatar = base64Image;
     
     return this.usersRepository.save(user);
   }
@@ -187,15 +183,50 @@ async createWithHashedPassword(userData: Omit<CreateUserDto, 'password'> & { pas
   async updateAvatarFile(id: string, file: any): Promise<User> {
     const user = await this.findOne(id);
     
-    // Delete old avatar if exists
-    if (user.avatar) {
-      await this.fileUploadService.deleteFile(user.avatar);
-    }
-
-    // Upload new avatar
-    const avatarUrl = await this.fileUploadService.uploadAvatar(file);
-    user.avatar = avatarUrl;
+    // Validate file
+    this.validateAvatarFile(file);
+    
+    // Convert file to base64
+    const base64Image = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+    user.avatar = base64Image;
     
     return this.usersRepository.save(user);
+  }
+
+  private validateBase64Image(base64Data: string): void {
+    if (!base64Data || typeof base64Data !== 'string') {
+      throw new BadRequestException('Avatar base64 inválido');
+    }
+
+    // Check if it's a valid data URL format
+    const dataUrlMatch = base64Data.match(/^data:(image\/(jpeg|jpg|png));base64,(.+)$/);
+    if (!dataUrlMatch) {
+      throw new BadRequestException('Avatar deve ser uma imagem válida em formato base64 (data:image/jpeg;base64,... ou data:image/png;base64,...)');
+    }
+
+    // Check size (approximate, 4/3 of original due to base64 encoding)
+    const base64Length = dataUrlMatch[3].length;
+    const approximateSize = (base64Length * 3) / 4;
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    
+    if (approximateSize > maxSize) {
+      throw new BadRequestException('Avatar muito grande. Máximo 5MB permitido');
+    }
+  }
+
+  private validateAvatarFile(file: any): void {
+    if (!file) {
+      throw new BadRequestException('Arquivo não fornecido');
+    }
+
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException('Tipo de arquivo não permitido. Apenas JPG e PNG são aceitos');
+    }
+
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      throw new BadRequestException('Arquivo muito grande. Máximo 5MB permitido');
+    }
   }
 }
