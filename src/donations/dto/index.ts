@@ -1,4 +1,5 @@
 export * from './user-public-profile.dto';
+export * from './user-complete.dto';
 export * from './donation-stats.dto';
 export * from './donation-to-send.dto';
 export * from './donation-to-receive.dto';
