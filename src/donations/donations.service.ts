@@ -108,28 +108,48 @@ export class DonationsService {
             order: { created_at: 'ASC' },
         });
 
-        return donations.map(donation => ({
-            id: donation.id,
-            amount: parseFloat(donation.amount.toString()),
-            type: donation.type,
-            status: donation.status,
-            created_at: donation.created_at,
-            updated_at: donation.updated_at,
-            deadline: donation.deadline,
-            completed_at: donation.completed_at,
-            notes: donation.notes,
-            comprovante_url: donation.comprovante_url,
-            // Report information
-            is_reported: donation.is_reported,
-            report_reason: donation.report_reason,
-            report_additional_info: donation.report_additional_info,
-            reported_at: donation.reported_at,
-            report_resolved: donation.report_resolved,
-            report_resolution: donation.report_resolution,
-            report_resolution_message: donation.report_admin_notes,
-            report_resolved_at: donation.report_resolved_at,
-            receiver: this.mapUserToComplete(donation.receiver),
-        }));
+        // Get queue positions for donor and receivers
+        const donorQueues = await this.queueService.findByUserId(userId);
+        
+        // Get all receiver queue positions in parallel
+        const donationPromises = donations.map(async donation => {
+            // Get donor position (user making the donation)
+            const donorQueue = donorQueues.find(q => q.donation_number === this.getLevelByAmount(parseFloat(donation.amount.toString())));
+            
+            // Get receiver position
+            const receiverQueues = await this.queueService.findByUserId(donation.receiver_id);
+            const receiverQueue = receiverQueues.find(q => q.donation_number === this.getLevelByAmount(parseFloat(donation.amount.toString())));
+
+            return {
+                id: donation.id,
+                amount: parseFloat(donation.amount.toString()),
+                type: donation.type,
+                status: donation.status,
+                created_at: donation.created_at,
+                updated_at: donation.updated_at,
+                deadline: donation.deadline,
+                completed_at: donation.completed_at,
+                notes: donation.notes,
+                comprovante_url: donation.comprovante_url,
+                // Report information
+                is_reported: donation.is_reported,
+                report_reason: donation.report_reason,
+                report_additional_info: donation.report_additional_info,
+                reported_at: donation.reported_at,
+                report_resolved: donation.report_resolved,
+                report_resolution: donation.report_resolution,
+                report_resolution_message: donation.report_admin_notes,
+                report_resolved_at: donation.report_resolved_at,
+                receiver: this.mapUserToComplete(donation.receiver),
+                // Queue position information
+                donor_queue_position: donorQueue?.position,
+                donor_queue_level: donorQueue?.donation_number,
+                receiver_queue_position: receiverQueue?.position,
+                receiver_queue_level: receiverQueue?.donation_number,
+            };
+        });
+
+        return Promise.all(donationPromises);
     }
 
     /**
@@ -145,28 +165,48 @@ export class DonationsService {
             order: { created_at: 'ASC' },
         });
 
-        return donations.map(donation => ({
-            id: donation.id,
-            amount: parseFloat(donation.amount.toString()),
-            type: donation.type,
-            status: donation.status,
-            created_at: donation.created_at,
-            updated_at: donation.updated_at,
-            deadline: donation.deadline,
-            completed_at: donation.completed_at,
-            notes: donation.notes,
-            comprovante_url: donation.comprovante_url,
-            // Report information
-            is_reported: donation.is_reported,
-            report_reason: donation.report_reason,
-            report_additional_info: donation.report_additional_info,
-            reported_at: donation.reported_at,
-            report_resolved: donation.report_resolved,
-            report_resolution: donation.report_resolution,
-            report_resolution_message: donation.report_admin_notes,
-            report_resolved_at: donation.report_resolved_at,
-            donor: this.mapUserToComplete(donation.donor),
-        }));
+        // Get queue positions for receivers and donors
+        const receiverQueues = await this.queueService.findByUserId(userId);
+        
+        // Get all donor queue positions in parallel
+        const donationPromises = donations.map(async donation => {
+            // Get receiver position (user receiving the donation)
+            const receiverQueue = receiverQueues.find(q => q.donation_number === this.getLevelByAmount(parseFloat(donation.amount.toString())));
+            
+            // Get donor position
+            const donorQueues = await this.queueService.findByUserId(donation.donor_id);
+            const donorQueue = donorQueues.find(q => q.donation_number === this.getLevelByAmount(parseFloat(donation.amount.toString())));
+
+            return {
+                id: donation.id,
+                amount: parseFloat(donation.amount.toString()),
+                type: donation.type,
+                status: donation.status,
+                created_at: donation.created_at,
+                updated_at: donation.updated_at,
+                deadline: donation.deadline,
+                completed_at: donation.completed_at,
+                notes: donation.notes,
+                comprovante_url: donation.comprovante_url,
+                // Report information
+                is_reported: donation.is_reported,
+                report_reason: donation.report_reason,
+                report_additional_info: donation.report_additional_info,
+                reported_at: donation.reported_at,
+                report_resolved: donation.report_resolved,
+                report_resolution: donation.report_resolution,
+                report_resolution_message: donation.report_admin_notes,
+                report_resolved_at: donation.report_resolved_at,
+                donor: this.mapUserToComplete(donation.donor),
+                // Queue position information
+                donor_queue_position: donorQueue?.position,
+                donor_queue_level: donorQueue?.donation_number,
+                receiver_queue_position: receiverQueue?.position,
+                receiver_queue_level: receiverQueue?.donation_number,
+            };
+        });
+
+        return Promise.all(donationPromises);
     }
 
     /**

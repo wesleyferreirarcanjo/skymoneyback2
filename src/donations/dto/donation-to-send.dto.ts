@@ -21,4 +21,9 @@ export class DonationToSendDto {
     report_resolution_message?: string;
     report_resolved_at?: Date;
     receiver: UserCompleteDto;
+    // Queue position information
+    donor_queue_position?: number;
+    donor_queue_level?: number;
+    receiver_queue_position?: number;
+    receiver_queue_level?: number;
 }
