@@ -362,9 +362,10 @@ export class DonationsService {
                 await this.createUpgradeDonationWithPosition(donation.receiver_id, 2, 200, userPosition);
                 this.logger.log(`[AUTO-UPGRADE] Created upgrade donation for user ${donation.receiver_id} to N2`);
                 
-                // Create cascade N1 (R$ 100) for next participant
-                await this.createCascadeDonation(1, 100);
-                this.logger.log(`[AUTO-UPGRADE] Created cascade for next participant in N1`);
+                // Create cascade N1 (R$ 100) from THIS USER to next participant
+                // The user who completed N1 DONATES the cascade to the next in line
+                await this.createUserCascadeDonation(donation.receiver_id, 1, 100);
+                this.logger.log(`[AUTO-UPGRADE] Created cascade from user ${donation.receiver_id} to next participant in N1`);
                 
                 // Update user level
                 await this.updateUserLevel(donation.receiver_id, 2);
@@ -688,9 +689,9 @@ export class DonationsService {
             await this.createUpgradeDonationWithPosition(donation.receiver_id, 2, 200, userPosition);
             this.logger.log(`[CASCADE] Created upgrade donation for user ${donation.receiver_id} to N2`);
             
-            // Create cascade N1 (R$ 100) for next participant
-            await this.createCascadeDonation(1, 100);
-            this.logger.log(`[CASCADE] Created next cascade for N1`);
+            // Create cascade N1 (R$ 100) from THIS USER to next participant
+            await this.createUserCascadeDonation(donation.receiver_id, 1, 100);
+            this.logger.log(`[CASCADE] Created cascade from user ${donation.receiver_id} to next participant`);
             
             // Update user level
             await this.updateUserLevel(donation.receiver_id, 2);
@@ -1945,7 +1946,78 @@ export class DonationsService {
     }
 
     /**
-     * Create cascade donation
+     * Create cascade donation FROM A SPECIFIC USER (who completed the level)
+     * CASCADE RULE: Position-based formula
+     * - N1: Every 3 donors → 1 receiver (donors 1-3 → receiver 34, donors 4-6 → receiver 35)
+     * - Formula: receiver_position = floor((donor_position - 1) / 3) + 34
+     */
+    private async createUserCascadeDonation(donorUserId: string, level: number, amount: number): Promise<void> {
+        try {
+            // Get donor's position in the queue
+            const donorQueues = await this.queueService.findByUserId(donorUserId);
+            const donorQueue = donorQueues.find(q => q.donation_number === level);
+            
+            if (!donorQueue) {
+                this.logger.warn(`[CASCADE] Donor ${donorUserId} not found in level ${level} queue - skipping cascade`);
+                return;
+            }
+            
+            const donorPosition = donorQueue.position;
+            
+            // Calculate receiver position based on N1 cascade formula
+            // Every 3 donors donate to 1 receiver (3 cascades of R$100 = R$300 to complete)
+            // Donors #1-3 → Receiver #34
+            // Donors #4-6 → Receiver #35
+            // Donors #7-9 → Receiver #36
+            const receiverPosition = Math.floor((donorPosition - 1) / 3) + 34;
+            
+            this.logger.log(
+                `[CASCADE] Calculating cascade receiver: donor=${donorUserId} ` +
+                `(position ${donorPosition}) → receiver position ${receiverPosition}`
+            );
+            
+            // Find receiver at calculated position
+            const allQueues = await this.queueService.findByDonationNumber(level);
+            const receiverQueue = allQueues.find(q => q.position === receiverPosition && q.user_id);
+            
+            if (!receiverQueue || !receiverQueue.user_id) {
+                this.logger.warn(
+                    `[CASCADE] No user found at position ${receiverPosition} for cascade ` +
+                    `from donor ${donorUserId} (position ${donorPosition}) - skipping`
+                );
+                return;
+            }
+            
+            const cascadeType = level === 1 ? DonationType.CASCADE_N1 : DonationType.PULL;
+            
+            this.logger.log(
+                `[CASCADE] Creating cascade: donor=${donorUserId} (position ${donorPosition}), ` +
+                `receiver=${receiverQueue.user_id} (position ${receiverPosition}), ` +
+                `amount=${amount}, type=${cascadeType}`
+            );
+            
+            // Create cascade donation: USER who completed → specific position receiver
+            await this.createDonation(
+                donorUserId,              // Donor: User who just completed the level
+                receiverQueue.user_id,    // Receiver: User at calculated position
+                amount,
+                cascadeType
+            );
+            
+            this.logger.log(
+                `[CASCADE] Successfully created cascade donation: ${amount} ` +
+                `from user ${donorUserId} (pos ${donorPosition}) to user ${receiverQueue.user_id} (pos ${receiverPosition})`
+            );
+        } catch (error) {
+            this.logger.error(`[CASCADE] Error creating cascade donation for level ${level}:`, error);
+            // Don't throw - cascade failure shouldn't block upgrade
+            this.logger.warn(`[CASCADE] Continuing without cascade donation for level ${level}`);
+        }
+    }
+
+    /**
+     * Create cascade donation from SYSTEM/ADMIN
+     * @deprecated Use createUserCascadeDonation instead for proper cascade flow
      */
     private async createCascadeDonation(level: number, amount: number): Promise<void> {
         try {
