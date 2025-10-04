@@ -20,6 +20,7 @@ import {
     DonationHistoryItemDto,
     DonationHistoryPaginationDto,
     UserPublicProfileDto,
+    UserCompleteDto,
     ComprovanteUploadResponseDto,
     DonationConfirmResponseDto,
     ComprovanteUrlResponseDto,
@@ -127,7 +128,7 @@ export class DonationsService {
             report_resolution: donation.report_resolution,
             report_resolution_message: donation.report_admin_notes,
             report_resolved_at: donation.report_resolved_at,
-            receiver: this.mapUserToPublicProfile(donation.receiver),
+            receiver: this.mapUserToComplete(donation.receiver),
         }));
     }
 
@@ -164,7 +165,7 @@ export class DonationsService {
             report_resolution: donation.report_resolution,
             report_resolution_message: donation.report_admin_notes,
             report_resolved_at: donation.report_resolved_at,
-            donor: this.mapUserToPublicProfile(donation.donor),
+            donor: this.mapUserToComplete(donation.donor),
         }));
     }
 
@@ -731,6 +732,48 @@ export class DonationsService {
                 : user.email || 'Nome não disponível',
             avatarUrl: user.email, // TODO: Implementar campo avatarUrl quando disponível
             pixKey: user.pixKey,
+        };
+    }
+
+    /**
+     * Helper method to map User to UserCompleteDto
+     */
+    private mapUserToComplete(user: User): UserCompleteDto {
+        if (!user) {
+            throw new Error('User cannot be null');
+        }
+
+        return {
+            id: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            phone: user.phone,
+            avatar: user.avatar,
+            pixKey: user.pixKey,
+            cpf: user.cpf,
+            birthDate: user.birthDate,
+            role: user.role,
+            status: user.status,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+            cep: user.cep,
+            address: user.address,
+            addressNumber: user.addressNumber,
+            bank: user.bank,
+            agency: user.agency,
+            account: user.account,
+            pixKeyType: user.pixKeyType,
+            pixCopyPaste: user.pixCopyPaste,
+            pixQrCode: user.pixQrCode,
+            btcAddress: user.btcAddress,
+            btcQrCode: user.btcQrCode,
+            usdtAddress: user.usdtAddress,
+            usdtQrCode: user.usdtQrCode,
+            pixOwnerName: user.pixOwnerName,
+            adminApproved: user.adminApproved,
+            adminApprovedAt: user.adminApprovedAt,
+            adminApprovedBy: user.adminApprovedBy,
         };
     }
 
