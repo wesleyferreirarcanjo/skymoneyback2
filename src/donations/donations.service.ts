@@ -5,6 +5,7 @@ import {
     BadRequestException,
     Logger,
 } from '@nestjs/common';
+import { UserRole } from '../users/entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Donation, DonationStatus, DonationType } from './entities/donation.entity';
@@ -335,8 +336,24 @@ export class DonationsService {
 
         await this.donationsRepository.save(donation);
 
-        // Trigger business rules for this donation type
-        await this.processDonationConfirmation(donation);
+        // Update receiver progress (but don't create upgrades automatically)
+        const level = this.getLevelByAmount(parseFloat(donation.amount.toString()));
+        await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), level);
+
+        // Check if level is completed
+        const completed = await this.checkLevelCompletion(donation.receiver_id, level);
+
+        // If level is completed, return upgrade information (don't create donations yet)
+        if (completed) {
+            const upgradeInfo = await this.getUpgradeInfo(donation.receiver_id, level);
+
+            return {
+                message: 'Doação confirmada com sucesso!',
+                level_completed: true,
+                completed_level: level,
+                upgrade_available: upgradeInfo,
+            } as any;
+        }
 
         // TODO: Implementar notificação para o doador
 
@@ -413,37 +430,285 @@ export class DonationsService {
         }
     }
 
-    // Business rule handlers (currently placeholders)
+    /**
+     * Accept upgrade to next level (user decision)
+     * This is the trigger that creates upgrade and cascade donations
+     */
+    async acceptUpgrade(userId: string, fromLevel: number, toLevel: number): Promise<{
+        message: string;
+        new_level: number;
+        donations_created: any[];
+    }> {
+        this.logger.log(`User ${userId} accepting upgrade from level ${fromLevel} to ${toLevel}`);
+
+        // 1. Verify user completed the previous level
+        const completed = await this.checkLevelCompletion(userId, fromLevel);
+
+        if (!completed) {
+            throw new BadRequestException('Você ainda não completou este nível');
+        }
+
+        // 2. Verify user hasn't already upgraded
+        const user = await this.usersRepository.findOne({ where: { id: userId } });
+        if (user.current_level >= toLevel) {
+            throw new BadRequestException('Você já está neste nível ou superior');
+        }
+
+        // 3. Verify the upgrade path is valid
+        if (toLevel !== fromLevel + 1) {
+            throw new BadRequestException('Sequência de upgrade inválida');
+        }
+
+        // 4. Create upgrade and cascade donations
+        const createdDonations = await this.processLevelUpgrade(userId, fromLevel);
+
+        return {
+            message: 'Upgrade realizado com sucesso!',
+            new_level: toLevel,
+            donations_created: createdDonations,
+        };
+    }
+
+    /**
+     * Get upgrade information for a completed level
+     */
+    private async getUpgradeInfo(userId: string, completedLevel: number): Promise<any> {
+        const upgradeMap = {
+            1: {
+                to_level: 2,
+                upgrade_amount: 200,
+                cascade_amount: 100,
+                total: 300,
+                description: 'Upgrade para Nível 2 + Cascata N1',
+            },
+            2: {
+                to_level: 3,
+                upgrade_amount: 1600,
+                reinjection_amount: 2000,
+                total: 3600,
+                description: 'Upgrade para Nível 3 + Reinjeção N2',
+            },
+            3: {
+                can_reenter: true,
+                message: 'Parabéns! Você completou todos os níveis!',
+                total_earned: 32000,
+            },
+        };
+
+        const info = upgradeMap[completedLevel];
+
+        if (!info) {
+            return null;
+        }
+
+        const queueEntries = await this.queueService.findByUserId(userId);
+        const levelQueue = queueEntries.find(q => q.donation_number === completedLevel);
+
+        return {
+            can_upgrade: completedLevel < 3,
+            from_level: completedLevel,
+            to_level: info.to_level || null,
+            requirements: info,
+            user_balance: parseFloat(levelQueue?.total_received?.toString() || '0'),
+            can_afford: true,
+        };
+    }
+
+    // ===== BUSINESS RULE HANDLERS - SKYMONEY 2.0 =====
+
+    /**
+     * Process PULL donation (monthly contribution)
+     */
     private async processPullDonation(donation: Donation): Promise<void> {
-        // TODO: Implement specific business logic for PULL donations
+        this.logger.log(`Processing PULL donation: ${donation.id} - Amount: ${donation.amount}`);
+        
+        try {
+            // 1. Determine level based on donation amount
+            const level = this.getLevelByAmount(parseFloat(donation.amount.toString()));
+            
+            // 2. Update receiver progress
+            await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), level);
+            
+            // 3. Check if level is completed
+            const completed = await this.checkLevelCompletion(donation.receiver_id, level);
+            
+            if (completed) {
+                // 4. Process upgrade to next level
+                await this.processLevelUpgrade(donation.receiver_id, level);
+            }
+        } catch (error) {
+            this.logger.error(`Error processing PULL donation ${donation.id}:`, error);
+            throw error;
+        }
     }
 
+    /**
+     * Process CASCADE_N1 donation (N1 cascade after user completes N1)
+     */
     private async processCascadeN1Donation(donation: Donation): Promise<void> {
-        // TODO: Implement specific business logic for CASCADE_N1 donations
+        this.logger.log(`Processing CASCADE_N1 donation: ${donation.id}`);
+        
+        try {
+            // 1. Update receiver progress in N1
+            await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), 1);
+            
+            // 2. Check if completed N1
+            const completed = await this.checkLevelCompletion(donation.receiver_id, 1);
+            
+            if (completed) {
+                // 3. Create upgrade for N2 (R$ 200)
+                await this.createUpgradeDonation(donation.receiver_id, 2, 200);
+                
+                // 4. Create cascade N1 (R$ 100) for next participant
+                await this.createCascadeDonation(1, 100);
+                
+                // 5. Update user level
+                await this.updateUserLevel(donation.receiver_id, 2);
+            }
+        } catch (error) {
+            this.logger.error(`Error processing CASCADE_N1 donation ${donation.id}:`, error);
+            throw error;
+        }
     }
 
+    /**
+     * Process UPGRADE_N2 donation (upgrade from N1 to N2)
+     */
     private async processUpgradeN2Donation(donation: Donation): Promise<void> {
-        // TODO: Implement specific business logic for UPGRADE_N2 donations
+        this.logger.log(`Processing UPGRADE_N2 donation: ${donation.id}`);
+        
+        try {
+            // 1. Ensure user is in N2 queue
+            await this.ensureUserInQueue(donation.receiver_id, 2);
+            
+            // 2. Update receiver progress in N2
+            await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), 2);
+        } catch (error) {
+            this.logger.error(`Error processing UPGRADE_N2 donation ${donation.id}:`, error);
+            throw error;
+        }
     }
 
+    /**
+     * Process REINJECTION_N2 donation (reinjection back to N2)
+     */
     private async processReinjectionN2Donation(donation: Donation): Promise<void> {
-        // TODO: Implement specific business logic for REINJECTION_N2 donations
+        this.logger.log(`Processing REINJECTION_N2 donation: ${donation.id}`);
+        
+        try {
+            // 1. Update receiver progress in N2
+            await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), 2);
+            
+            // 2. Check if completed N2
+            const completed = await this.checkLevelCompletion(donation.receiver_id, 2);
+            
+            if (completed) {
+                // 3. Create upgrade for N3 (R$ 1.600)
+                await this.createUpgradeDonation(donation.receiver_id, 3, 1600);
+                
+                // 4. Create reinjection N2 (R$ 2.000 = 10 donations of R$ 200)
+                await this.createReinjectionDonations(2, 2000);
+                
+                // 5. Check and trigger package 8k (every 5 upgrades)
+                await this.checkAndTriggerPackage8k();
+                
+                // 6. Update user level
+                await this.updateUserLevel(donation.receiver_id, 3);
+            }
+        } catch (error) {
+            this.logger.error(`Error processing REINJECTION_N2 donation ${donation.id}:`, error);
+            throw error;
+        }
     }
 
+    /**
+     * Process UPGRADE_N3 donation (upgrade from N2 to N3)
+     */
     private async processUpgradeN3Donation(donation: Donation): Promise<void> {
-        // TODO: Implement specific business logic for UPGRADE_N3 donations
+        this.logger.log(`Processing UPGRADE_N3 donation: ${donation.id}`);
+        
+        try {
+            // 1. Ensure user is in N3 queue
+            await this.ensureUserInQueue(donation.receiver_id, 3);
+            
+            // 2. Update receiver progress in N3
+            await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), 3);
+        } catch (error) {
+            this.logger.error(`Error processing UPGRADE_N3 donation ${donation.id}:`, error);
+            throw error;
+        }
     }
 
+    /**
+     * Process REINFORCEMENT_N3 donation (N3 reinforcement - goes to N2 or cascades in N3)
+     */
     private async processReinforcementN3Donation(donation: Donation): Promise<void> {
-        // TODO: Implement specific business logic for REINFORCEMENT_N3 donations
+        this.logger.log(`Processing REINFORCEMENT_N3 donation: ${donation.id}`);
+        
+        try {
+            // 1. Check if N2 is still active
+            const n2Active = await this.isLevelActive(2);
+            
+            if (n2Active) {
+                // 2. Reinject to N2
+                await this.createReinjectionDonations(2, parseFloat(donation.amount.toString()));
+                this.logger.log(`Reinforcement sent to N2: ${donation.amount}`);
+            } else {
+                // 3. Use as final cascade N3
+                await this.createCascadeDonation(3, parseFloat(donation.amount.toString()));
+                this.logger.log(`Reinforcement used as N3 cascade: ${donation.amount}`);
+            }
+            
+            // 4. Update receiver progress (counts towards N3 completion)
+            await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), 3);
+        } catch (error) {
+            this.logger.error(`Error processing REINFORCEMENT_N3 donation ${donation.id}:`, error);
+            throw error;
+        }
     }
 
+    /**
+     * Process ADM_N3 donation (administrative donation - first 2 of N3)
+     */
     private async processAdmN3Donation(donation: Donation): Promise<void> {
-        // TODO: Implement specific business logic for ADM_N3 donations
+        this.logger.log(`Processing ADM_N3 donation: ${donation.id}`);
+        
+        try {
+            // Admin donations don't affect user progress
+            // Just log for administrative reports
+            this.logger.log(`Admin donation logged: ${donation.amount} from ${donation.donor_id}`);
+        } catch (error) {
+            this.logger.error(`Error processing ADM_N3 donation ${donation.id}:`, error);
+            throw error;
+        }
     }
 
+    /**
+     * Process FINAL_PAYMENT_N3 donation (final payments - donations 8-27 of N3)
+     */
     private async processFinalPaymentN3Donation(donation: Donation): Promise<void> {
-        // TODO: Implement specific business logic for FINAL_PAYMENT_N3 donations
+        this.logger.log(`Processing FINAL_PAYMENT_N3 donation: ${donation.id}`);
+        
+        try {
+            // 1. Update receiver progress in N3
+            await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), 3);
+            
+            // 2. Check if completed N3
+            const completed = await this.checkLevelCompletion(donation.receiver_id, 3);
+            
+            if (completed) {
+                // 3. Mark user as eligible for reentry
+                await this.markUserForReentry(donation.receiver_id);
+                
+                // 4. Create final cascade N3 (R$ 8.000)
+                await this.createCascadeDonation(3, 8000);
+                
+                this.logger.log(`User ${donation.receiver_id} completed N3! R$ 32.000 earned.`);
+            }
+        } catch (error) {
+            this.logger.error(`Error processing FINAL_PAYMENT_N3 donation ${donation.id}:`, error);
+            throw error;
+        }
     }
 
     /**
@@ -1196,5 +1461,502 @@ export class DonationsService {
         }
 
         return { createdCount, skippedExisting, receiversProcessed };
+    }
+
+    // ===== AUXILIARY METHODS FOR SKYMONEY 2.0 LOGIC =====
+
+    /**
+     * Get level based on donation amount
+     */
+    private getLevelByAmount(amount: number): number {
+        if (amount === 100) return 1;
+        if (amount === 200) return 2;
+        if (amount === 1600) return 3;
+        
+        this.logger.warn(`Unknown amount for level determination: ${amount}, defaulting to level 1`);
+        return 1;
+    }
+
+    /**
+     * Get required donations for level
+     */
+    private getRequiredDonationsForLevel(level: number): number {
+        switch (level) {
+            case 1: return 3;
+            case 2: return 18;
+            case 3: return 27;
+            default: throw new BadRequestException(`Unknown level: ${level}`);
+        }
+    }
+
+    /**
+     * Update receiver progress in a specific level
+     */
+    private async updateReceiverProgress(userId: string, amount: number, level: number): Promise<void> {
+        const queueEntries = await this.queueService.findByUserId(userId);
+        const levelQueue = queueEntries.find(q => q.donation_number === level);
+        
+        if (!levelQueue) {
+            this.logger.warn(`User ${userId} not found in level ${level} queue, skipping progress update`);
+            return;
+        }
+        
+        // Update progress
+        const newDonationsReceived = (levelQueue.donations_received || 0) + 1;
+        const newTotalReceived = parseFloat(levelQueue.total_received?.toString() || '0') + amount;
+        
+        await this.dataSource.query(
+            `UPDATE queue SET donations_received = $1, total_received = $2, updated_at = NOW() WHERE id = $3`,
+            [newDonationsReceived, newTotalReceived, levelQueue.id]
+        );
+        
+        this.logger.log(`Updated progress for user ${userId} in level ${level}: ${newDonationsReceived}/${this.getRequiredDonationsForLevel(level)} donations`);
+    }
+
+    /**
+     * Check if user completed a level
+     */
+    private async checkLevelCompletion(userId: string, level: number): Promise<boolean> {
+        const queueEntries = await this.queueService.findByUserId(userId);
+        const levelQueue = queueEntries.find(q => q.donation_number === level);
+        
+        if (!levelQueue) return false;
+        
+        const requiredDonations = this.getRequiredDonationsForLevel(level);
+        const donationsReceived = levelQueue.donations_received || 0;
+        
+        const isCompleted = donationsReceived >= requiredDonations;
+        
+        if (isCompleted && !levelQueue.level_completed) {
+            // Mark level as completed
+            await this.dataSource.query(
+                `UPDATE queue SET level_completed = true, level_completed_at = NOW() WHERE id = $1`,
+                [levelQueue.id]
+            );
+            this.logger.log(`User ${userId} completed level ${level}!`);
+        }
+        
+        return isCompleted;
+    }
+
+    /**
+     * Process level upgrade (create upgrade donation and cascade)
+     * Returns the donations created
+     */
+    private async processLevelUpgrade(userId: string, completedLevel: number): Promise<any[]> {
+        this.logger.log(`Processing level upgrade for user ${userId} from level ${completedLevel}`);
+        
+        const createdDonations = [];
+        
+        switch (completedLevel) {
+            case 1:
+                // Create upgrade to N2 (R$ 200)
+                await this.createUpgradeDonation(userId, 2, 200);
+                createdDonations.push({ type: 'upgrade', level: 2, amount: 200 });
+                
+                // Create cascade N1 (R$ 100)
+                await this.createCascadeDonation(1, 100);
+                createdDonations.push({ type: 'cascade', level: 1, amount: 100 });
+                
+                // Update user level
+                await this.updateUserLevel(userId, 2);
+                break;
+                
+            case 2:
+                // Create upgrade to N3 (R$ 1.600)
+                await this.createUpgradeDonation(userId, 3, 1600);
+                createdDonations.push({ type: 'upgrade', level: 3, amount: 1600 });
+                
+                // Create reinjection N2 (R$ 2.000)
+                await this.createReinjectionDonations(2, 2000);
+                createdDonations.push({ type: 'reinjection', level: 2, amount: 2000 });
+                
+                // Check package 8k
+                await this.checkAndTriggerPackage8k();
+                
+                // Update user level
+                await this.updateUserLevel(userId, 3);
+                break;
+                
+            case 3:
+                // Mark user for reentry
+                await this.markUserForReentry(userId);
+                createdDonations.push({ type: 'reentry_enabled', level: 3 });
+                
+                // Create final cascade
+                await this.createCascadeDonation(3, 8000);
+                createdDonations.push({ type: 'final_cascade', level: 3, amount: 8000 });
+                break;
+                
+            default:
+                this.logger.warn(`Unknown level for upgrade: ${completedLevel}`);
+        }
+        
+        return createdDonations;
+    }
+
+    /**
+     * Create upgrade donation to next level
+     */
+    private async createUpgradeDonation(userId: string, targetLevel: number, amount: number): Promise<void> {
+        const nextReceiver = await this.getNextReceiverInLevel(targetLevel);
+        
+        if (!nextReceiver) {
+            this.logger.warn(`No receiver found for level ${targetLevel} upgrade, creating for user ${userId}`);
+            // If no receiver, user becomes the first in that level
+            await this.ensureUserInQueue(userId, targetLevel);
+            return;
+        }
+        
+        const donationType = this.getUpgradeDonationType(targetLevel);
+        
+        await this.createDonation(
+            userId,
+            nextReceiver.user_id || userId,
+            amount,
+            donationType
+        );
+        
+        this.logger.log(`Created upgrade donation: ${amount} to level ${targetLevel} for user ${userId}`);
+    }
+
+    /**
+     * Create cascade donation
+     */
+    private async createCascadeDonation(level: number, amount: number): Promise<void> {
+        const nextReceiver = await this.getNextReceiverInLevel(level);
+        
+        if (!nextReceiver) {
+            this.logger.warn(`No receiver found for level ${level} cascade`);
+            return;
+        }
+        
+        const cascadeType = level === 1 ? DonationType.CASCADE_N1 : DonationType.PULL;
+        
+        // System donation (no specific donor)
+        const systemUser = await this.usersRepository.findOne({ where: { role: UserRole.ADMIN } });
+        
+        await this.createDonation(
+            systemUser?.id || nextReceiver.user_id,
+            nextReceiver.user_id,
+            amount,
+            cascadeType
+        );
+        
+        this.logger.log(`Created cascade donation: ${amount} for level ${level}`);
+    }
+
+    /**
+     * Create reinjection donations
+     */
+    private async createReinjectionDonations(level: number, totalAmount: number): Promise<void> {
+        const donationAmount = level === 2 ? 200 : 1600;
+        const numberOfDonations = Math.floor(totalAmount / donationAmount);
+        
+        this.logger.log(`Creating ${numberOfDonations} reinjection donations of ${donationAmount} for level ${level}`);
+        
+        // System donation
+        const systemUser = await this.usersRepository.findOne({ where: { role: UserRole.ADMIN } });
+        
+        for (let i = 0; i < numberOfDonations; i++) {
+            const nextReceiver = await this.getNextReceiverInLevel(level);
+            
+            if (!nextReceiver) {
+                this.logger.warn(`No receiver found for level ${level} reinjection ${i + 1}`);
+                break;
+            }
+            
+            await this.createDonation(
+                systemUser?.id || nextReceiver.user_id,
+                nextReceiver.user_id,
+                donationAmount,
+                DonationType.REINJECTION_N2
+            );
+        }
+        
+        this.logger.log(`Created ${numberOfDonations} reinjection donations for level ${level}`);
+    }
+
+    /**
+     * Ensure user is in queue for a specific level
+     */
+    private async ensureUserInQueue(userId: string, level: number): Promise<void> {
+        const existingQueues = await this.queueService.findByUserId(userId);
+        const alreadyInLevel = existingQueues.some(q => q.donation_number === level);
+        
+        if (!alreadyInLevel) {
+            const nextPosition = await this.getNextAvailablePosition(level);
+            
+            await this.dataSource.query(
+                `INSERT INTO queue (user_id, donation_number, position, level, donations_required, is_receiver, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, false, NOW(), NOW())`,
+                [userId, level, nextPosition, level, this.getRequiredDonationsForLevel(level)]
+            );
+            
+            this.logger.log(`Added user ${userId} to level ${level} queue at position ${nextPosition}`);
+        }
+    }
+
+    /**
+     * Get next receiver in level queue
+     */
+    private async getNextReceiverInLevel(level: number): Promise<any> {
+        const queues = await this.queueService.findByDonationNumber(level);
+        const sortedQueues = queues
+            .filter(q => q.user_id && !q.level_completed)
+            .sort((a, b) => a.position - b.position);
+        
+        return sortedQueues[0] || null;
+    }
+
+    /**
+     * Get next available position in level
+     */
+    private async getNextAvailablePosition(level: number): Promise<number> {
+        const queues = await this.queueService.findByDonationNumber(level);
+        const maxPosition = queues.length > 0 ? Math.max(...queues.map(q => q.position)) : 0;
+        return maxPosition + 1;
+    }
+
+    /**
+     * Get upgrade donation type for target level
+     */
+    private getUpgradeDonationType(level: number): DonationType {
+        switch (level) {
+            case 2: return DonationType.UPGRADE_N2;
+            case 3: return DonationType.UPGRADE_N3;
+            default: throw new BadRequestException(`Unknown upgrade level: ${level}`);
+        }
+    }
+
+    /**
+     * Update user level
+     */
+    private async updateUserLevel(userId: string, newLevel: number): Promise<void> {
+        await this.usersRepository.update(userId, {
+            current_level: newLevel
+        });
+        
+        this.logger.log(`Updated user ${userId} to level ${newLevel}`);
+    }
+
+    /**
+     * Mark user for reentry after completing N3
+     */
+    private async markUserForReentry(userId: string): Promise<void> {
+        await this.usersRepository.update(userId, {
+            can_reenter: true,
+            n3_completed_at: new Date()
+        });
+        
+        this.logger.log(`Marked user ${userId} for reentry - N3 completed!`);
+    }
+
+    /**
+     * Check and trigger package 8k (every 5 upgrades to N3)
+     */
+    private async checkAndTriggerPackage8k(): Promise<void> {
+        // Count recent upgrades to N3 in last 24 hours
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        
+        const recentUpgrades = await this.donationsRepository.count({
+            where: {
+                type: DonationType.UPGRADE_N3,
+                status: DonationStatus.CONFIRMED,
+                completed_at: oneDayAgo as any // TypeORM MoreThan equivalent
+            }
+        });
+        
+        // Trigger package 8k every 5 upgrades
+        if (recentUpgrades > 0 && recentUpgrades % 5 === 0) {
+            await this.createReinjectionDonations(2, 8000);
+            this.logger.log(`🎉 Triggered package 8k after ${recentUpgrades} upgrades!`);
+        }
+    }
+
+    /**
+     * Check if level is still active (has users who haven't completed it)
+     */
+    private async isLevelActive(level: number): Promise<boolean> {
+        const activeUsers = await this.queueService.findByDonationNumber(level);
+        return activeUsers.some(q => q.user_id && !q.level_completed);
+    }
+
+    // ===== PUBLIC METHODS FOR SKYMONEY 2.0 =====
+
+    /**
+     * Generate monthly PULL donations for all active levels
+     */
+    async generateMonthlyPull(): Promise<{ 
+        message: string; 
+        created: number; 
+        errors: string[];
+        breakdown: {
+            n1: number;
+            n2: number;
+            n3: number;
+        }
+    }> {
+        const errors: string[] = [];
+        const breakdown = { n1: 0, n2: 0, n3: 0 };
+        
+        this.logger.log('Starting monthly PULL generation...');
+        
+        try {
+            // N1: R$ 10.000 = 100 donations of R$ 100
+            try {
+                const n1Result = await this.generatePullForLevel(1, 100, 100);
+                breakdown.n1 = n1Result;
+                this.logger.log(`N1: Generated ${n1Result} PULL donations`);
+            } catch (error) {
+                errors.push(`N1 Error: ${error.message}`);
+                this.logger.error('Error generating N1 PULL:', error);
+            }
+            
+            // N2: R$ 10.000 = 50 donations of R$ 200
+            try {
+                const n2Result = await this.generatePullForLevel(2, 200, 50);
+                breakdown.n2 = n2Result;
+                this.logger.log(`N2: Generated ${n2Result} PULL donations`);
+            } catch (error) {
+                errors.push(`N2 Error: ${error.message}`);
+                this.logger.error('Error generating N2 PULL:', error);
+            }
+            
+            // N3: R$ 10.000 = 6 donations of R$ 1.600 (only if N2 is completed)
+            const n2Active = await this.isLevelActive(2);
+            if (!n2Active) {
+                try {
+                    const n3Result = await this.generatePullForLevel(3, 1600, 6);
+                    breakdown.n3 = n3Result;
+                    this.logger.log(`N3: Generated ${n3Result} PULL donations`);
+                } catch (error) {
+                    errors.push(`N3 Error: ${error.message}`);
+                    this.logger.error('Error generating N3 PULL:', error);
+                }
+            } else {
+                this.logger.log('N3: Skipped (N2 still active)');
+            }
+            
+            const totalCreated = breakdown.n1 + breakdown.n2 + breakdown.n3;
+            
+            return {
+                message: `Monthly PULL generated successfully. Total: ${totalCreated} donations`,
+                created: totalCreated,
+                errors,
+                breakdown
+            };
+            
+        } catch (error) {
+            errors.push(`General Error: ${error.message}`);
+            this.logger.error('Error generating monthly PULL:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Generate PULL donations for a specific level
+     */
+    private async generatePullForLevel(level: number, amount: number, count: number): Promise<number> {
+        let created = 0;
+        const systemUser = await this.usersRepository.findOne({ where: { role: UserRole.ADMIN } });
+        
+        for (let i = 0; i < count; i++) {
+            try {
+                const nextReceiver = await this.getNextReceiverInLevel(level);
+                
+                if (!nextReceiver || !nextReceiver.user_id) {
+                    this.logger.warn(`No receiver found for level ${level} PULL ${i + 1}`);
+                    continue;
+                }
+                
+                // Create PULL donation
+                await this.createDonation(
+                    systemUser?.id || nextReceiver.user_id,
+                    nextReceiver.user_id,
+                    amount,
+                    DonationType.PULL
+                );
+                
+                created++;
+                
+            } catch (error) {
+                this.logger.error(`Error creating PULL donation ${i + 1} for level ${level}:`, error);
+            }
+        }
+        
+        return created;
+    }
+
+    /**
+     * Get level statistics
+     */
+    async getLevelStats(level: number): Promise<{
+        level: number;
+        totalUsers: number;
+        activeUsers: number;
+        completedUsers: number;
+        averageProgress: number;
+        totalDonationsReceived: number;
+        totalAmountReceived: number;
+    }> {
+        const queues = await this.queueService.findByDonationNumber(level);
+        
+        const totalUsers = queues.filter(q => q.user_id).length;
+        const activeUsers = queues.filter(q => q.user_id && !q.level_completed).length;
+        const completedUsers = queues.filter(q => q.user_id && q.level_completed).length;
+        
+        const requiredDonations = this.getRequiredDonationsForLevel(level);
+        const totalProgress = queues.reduce((sum, q) => {
+            if (!q.user_id) return sum;
+            const progress = ((q.donations_received || 0) / requiredDonations) * 100;
+            return sum + progress;
+        }, 0);
+        
+        const averageProgress = totalUsers > 0 ? totalProgress / totalUsers : 0;
+        
+        const totalDonationsReceived = queues.reduce((sum, q) => sum + (q.donations_received || 0), 0);
+        const totalAmountReceived = queues.reduce((sum, q) => sum + parseFloat(q.total_received?.toString() || '0'), 0);
+        
+        return {
+            level,
+            totalUsers,
+            activeUsers,
+            completedUsers,
+            averageProgress: Math.round(averageProgress * 100) / 100,
+            totalDonationsReceived,
+            totalAmountReceived
+        };
+    }
+
+    /**
+     * Get user progress in all levels
+     */
+    async getUserLevelProgress(userId: string): Promise<Array<{
+        level: number;
+        donations_received: number;
+        donations_required: number;
+        total_received: number;
+        progress_percentage: number;
+        level_completed: boolean;
+        level_completed_at?: Date;
+    }>> {
+        const queues = await this.queueService.findByUserId(userId);
+        
+        return queues.map(queue => {
+            const donationsReceived = queue.donations_received || 0;
+            const donationsRequired = queue.donations_required || this.getRequiredDonationsForLevel(queue.level || 1);
+            const progressPercentage = (donationsReceived / donationsRequired) * 100;
+            
+            return {
+                level: queue.level || queue.donation_number,
+                donations_received: donationsReceived,
+                donations_required: donationsRequired,
+                total_received: parseFloat(queue.total_received?.toString() || '0'),
+                progress_percentage: Math.round(progressPercentage * 100) / 100,
+                level_completed: queue.level_completed || false,
+                level_completed_at: queue.level_completed_at
+            };
+        }).sort((a, b) => a.level - b.level);
     }
 }

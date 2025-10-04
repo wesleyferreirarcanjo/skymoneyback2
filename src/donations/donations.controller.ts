@@ -350,4 +350,80 @@ export class DonationsController {
         );
     }
 
+    /**
+     * Generate monthly PULL donations for all active levels
+     * SkyMoney 2.0 - Monthly PULL generation
+     */
+    @Post('admin/generate-monthly-pull')
+    @Roles(UserRole.ADMIN)
+    @UseGuards(RolesGuard)
+    async generateMonthlyPull(): Promise<{ 
+        message: string; 
+        created: number; 
+        errors: string[];
+        breakdown: {
+            n1: number;
+            n2: number;
+            n3: number;
+        }
+    }> {
+        return this.donationsService.generateMonthlyPull();
+    }
+
+    /**
+     * Get level statistics for a specific level
+     * SkyMoney 2.0 - Level progress tracking
+     */
+    @Get('admin/level-stats/:level')
+    @Roles(UserRole.ADMIN)
+    @UseGuards(RolesGuard)
+    async getLevelStats(@Param('level', ParseIntPipe) level: number): Promise<{
+        level: number;
+        totalUsers: number;
+        activeUsers: number;
+        completedUsers: number;
+        averageProgress: number;
+        totalDonationsReceived: number;
+        totalAmountReceived: number;
+    }> {
+        return this.donationsService.getLevelStats(level);
+    }
+
+    /**
+     * Get user progress in all levels
+     * SkyMoney 2.0 - User level progress
+     */
+    @Get('my-level-progress')
+    async getUserLevelProgress(@Request() req): Promise<Array<{
+        level: number;
+        donations_received: number;
+        donations_required: number;
+        total_received: number;
+        progress_percentage: number;
+        level_completed: boolean;
+        level_completed_at?: Date;
+    }>> {
+        return this.donationsService.getUserLevelProgress(req.user.userId);
+    }
+
+    /**
+     * Accept upgrade to next level
+     * SkyMoney 2.0 - User accepts upgrade after completing a level
+     */
+    @Post('accept-upgrade')
+    async acceptUpgrade(
+        @Request() req,
+        @Body() body: { from_level: number; to_level: number }
+    ): Promise<{
+        message: string;
+        new_level: number;
+        donations_created: any[];
+    }> {
+        return this.donationsService.acceptUpgrade(
+            req.user.userId,
+            body.from_level,
+            body.to_level
+        );
+    }
+
 }
