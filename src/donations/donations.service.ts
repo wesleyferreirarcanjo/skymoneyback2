@@ -337,12 +337,6 @@ export class DonationsService {
 
         await this.donationsRepository.save(donation);
 
-        // Check if DONOR completed paying all upgrade donations (advances level)
-        // Only check when the donation is CONFIRMED (receiver confirmed payment)
-        if (donation.status === DonationStatus.CONFIRMED) {
-            await this.checkDonorUpgradeCompletion(donation);
-        }
-
         // Update receiver progress
         const level = this.getLevelByAmount(parseFloat(donation.amount.toString()));
         await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), level);
@@ -395,6 +389,12 @@ export class DonationsService {
                 completed_level: level,
                 upgrade_available: upgradeInfo,
             } as any;
+        }
+
+        // Check if DONOR completed paying all upgrade donations (advances level)
+        // Only check when the donation is CONFIRMED (receiver confirmed payment)
+        if (donation.status === DonationStatus.CONFIRMED) {
+            await this.checkDonorUpgradeCompletion(donation);
         }
 
         // TODO: Implementar notificação para o doador
