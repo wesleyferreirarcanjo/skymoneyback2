@@ -1673,6 +1673,7 @@ export class DonationsService {
      * Generate initial pending donations for a 100-user queue following the pattern:
      * #1 receives from #2,#3,#4; #2 from #5,#6,#7; ...; #33 from #98,#99,#100
      * Only executes when exactly 100 users are present for the given donationNumber.
+     * FIXED: Now supports natural flow progression for subsequent PULLs
      */
     async generateCycleDonations(
         donationNumber: number,
@@ -1694,30 +1695,82 @@ export class DonationsService {
         let skippedExisting = 0;
         let receiversProcessed = 0;
 
-        // Fixed mapping per spec: receivers 1..33, donors are 3*r-1, 3*r, 3*r+1
+        // Calculate how many receivers we can process based on available donors
         const maxReceivers = 33;
         const receiverStart = isZeroBased ? 0 : 1;
-        const receiverEnd = isZeroBased ? 32 : 33;
+        const receiverEnd = isZeroBased ? maxReceivers - 1 : maxReceivers;
+
+        this.logger.log(`[CYCLE] Processing ${maxReceivers} receivers for level ${donationNumber} (positions ${receiverStart}-${receiverEnd})`);
+
         for (let r = receiverStart; r <= receiverEnd; r++) {
             const receiverEntry = ordered.find(q => q.position === r);
-            if (!receiverEntry || !receiverEntry.user_id) continue;
+            if (!receiverEntry || !receiverEntry.user_id) {
+                this.logger.warn(`[CYCLE] No user found at position ${r}`);
+                continue;
+            }
             const receiverId = receiverEntry.user_id;
 
+            // ✅ NOVA LÓGICA: Verificar quanto o receiver já recebeu
+            const receiverDonations = await this.donationsRepository.find({
+                where: {
+                    receiver_id: receiverId,
+                    type: type || DonationType.PULL,
+                    status: DonationStatus.CONFIRMED
+                }
+            });
+
+            const requiredDonations = this.getRequiredDonationsForLevel(donationNumber);
+            const receivedAmount = receiverDonations.reduce((sum, d) => sum + parseFloat(d.amount.toString()), 0);
+            const requiredAmount = requiredDonations * amount;
+
+            // Se já completou, pular
+            if (receivedAmount >= requiredAmount) {
+                this.logger.log(`[CYCLE] Receiver ${receiverId} (pos ${r}) already completed level ${donationNumber} - skipping`);
+                skippedExisting++;
+                continue;
+            }
+
+            // Calcular quantas doações ainda precisa
+            const remainingAmount = requiredAmount - receivedAmount;
+            const remainingDonations = Math.ceil(remainingAmount / amount);
+
+            this.logger.log(`[CYCLE] Receiver ${receiverId} (pos ${r}) needs ${remainingDonations} more donations (${remainingAmount} remaining)`);
+
+            // Find 3 donors for this receiver
             const donorsPositions = isZeroBased
                 ? [3 * r + 1, 3 * r + 2, 3 * r + 3]
                 : [3 * r - 1, 3 * r, 3 * r + 1];
-            for (const pos of donorsPositions) {
-                const donorEntry = ordered.find(q => q.position === pos);
-                if (!donorEntry || !donorEntry.user_id) continue;
 
-                // Idempotency: skip if a pending/awaiting donation already exists
+            let donationsCreatedForReceiver = 0;
+            for (const pos of donorsPositions) {
+                if (pos > queue.length || donationsCreatedForReceiver >= remainingDonations) {
+                    break;
+                }
+
+                const donorEntry = ordered.find(q => q.position === pos);
+                if (!donorEntry || !donorEntry.user_id) {
+                    this.logger.warn(`[CYCLE] No user found at donor position ${pos}`);
+                    continue;
+                }
+
+                // Skip if would create self-donation
+                if (donorEntry.user_id === receiverId) {
+                    this.logger.warn(`[CYCLE] Skipping self-donation: donor ${donorEntry.user_id} = receiver ${receiverId}`);
+                    continue;
+                }
+
+                // ✅ NOVA LÓGICA: Verificar se esta doação específica já existe
                 const existing = await this.donationsRepository.findOne({
-                    where: [
-                        { donor_id: donorEntry.user_id, receiver_id: receiverId, status: DonationStatus.PENDING_PAYMENT },
-                        { donor_id: donorEntry.user_id, receiver_id: receiverId, status: DonationStatus.PENDING_CONFIRMATION },
-                    ],
+                    where: {
+                        donor_id: donorEntry.user_id,
+                        receiver_id: receiverId,
+                        type: type || DonationType.PULL,
+                        amount: amount
+                    }
                 });
+
                 if (existing) {
+                    this.logger.log(`[CYCLE] Donation already exists: donor ${donorEntry.user_id} → receiver ${receiverId} (${existing.status})`);
                     skippedExisting++;
                     continue;
                 }
@@ -1733,11 +1786,14 @@ export class DonationsService {
                 });
                 await this.donationsRepository.save(donation);
                 createdCount++;
+                donationsCreatedForReceiver++;
+                this.logger.log(`[CYCLE] Created: donor ${donorEntry.user_id} (pos ${pos}) → receiver ${receiverId} (pos ${r})`);
             }
 
             receiversProcessed++;
         }
 
+        this.logger.log(`[CYCLE] Level ${donationNumber} completed: ${createdCount} donations created, ${skippedExisting} skipped, ${receiversProcessed} receivers processed`);
         return { createdCount, skippedExisting, receiversProcessed };
     }
 
@@ -2557,17 +2613,127 @@ export class DonationsService {
 
     /**
      * Generate PULL donations for a specific level
+     * FIXED: Now follows the 3:1 cycle pattern as per specification
      */
     private async generatePullForLevel(level: number, amount: number, count: number): Promise<number> {
+        this.logger.log(`[PULL] Generating ${count} PULL donations for level ${level} (amount: ${amount})`);
+        
+        // For level 1, use the 3:1 cycle pattern (33 receivers, 99 donors)
+        if (level === 1) {
+            return await this.generatePullCycleForLevel1(amount, count);
+        }
+        
+        // For levels 2 and 3, use linear distribution
+        return await this.generatePullLinearForLevel(level, amount, count);
+    }
+
+    /**
+     * Generate PULL donations for level 1 using 3:1 cycle pattern
+     * Follows the specification: #1-33 receive from #2-100 in groups of 3
+     */
+    private async generatePullCycleForLevel1(amount: number, totalCount: number): Promise<number> {
+        const queue = await this.queueService.findByDonationNumber(1);
+        if (queue.length < 33) {
+            this.logger.warn(`[PULL] Level 1 queue has only ${queue.length} users, minimum 33 required for cycle`);
+            return 0;
+        }
+
+        const ordered = [...queue].sort((a, b) => a.position - b.position);
+        const minPosition = ordered[0]?.position ?? 1;
+        const isZeroBased = minPosition === 0;
+
         let created = 0;
         const systemUser = await this.usersRepository.findOne({ where: { role: UserRole.ADMIN } });
+
+        // Calculate how many receivers we can process based on available donors
+        const maxReceivers = Math.min(33, Math.floor(totalCount / 3));
+        const receiverStart = isZeroBased ? 0 : 1;
+        const receiverEnd = isZeroBased ? maxReceivers - 1 : maxReceivers;
+
+        this.logger.log(`[PULL] Processing ${maxReceivers} receivers (positions ${receiverStart}-${receiverEnd})`);
+
+        for (let r = receiverStart; r <= receiverEnd; r++) {
+            const receiverEntry = ordered.find(q => q.position === r);
+            if (!receiverEntry || !receiverEntry.user_id) {
+                this.logger.warn(`[PULL] No user found at position ${r}`);
+                continue;
+            }
+
+            const receiverId = receiverEntry.user_id;
+            
+            // Find 3 donors for this receiver
+            const donorsPositions = isZeroBased
+                ? [3 * r + 1, 3 * r + 2, 3 * r + 3]
+                : [3 * r - 1, 3 * r, 3 * r + 1];
+
+            for (const pos of donorsPositions) {
+                if (pos > queue.length) {
+                    this.logger.warn(`[PULL] Donor position ${pos} exceeds queue length ${queue.length}`);
+                    continue;
+                }
+
+                const donorEntry = ordered.find(q => q.position === pos);
+                if (!donorEntry || !donorEntry.user_id) {
+                    this.logger.warn(`[PULL] No user found at donor position ${pos}`);
+                    continue;
+                }
+
+                // Skip if would create self-donation
+                if (donorEntry.user_id === receiverId) {
+                    this.logger.warn(`[PULL] Skipping self-donation: donor ${donorEntry.user_id} = receiver ${receiverId}`);
+                    continue;
+                }
+
+                // Check if donation already exists
+                const existing = await this.donationsRepository.findOne({
+                    where: [
+                        { donor_id: donorEntry.user_id, receiver_id: receiverId, type: DonationType.PULL, status: DonationStatus.PENDING_PAYMENT },
+                        { donor_id: donorEntry.user_id, receiver_id: receiverId, type: DonationType.PULL, status: DonationStatus.PENDING_CONFIRMATION },
+                    ],
+                });
+
+                if (existing) {
+                    this.logger.log(`[PULL] Donation already exists: donor ${donorEntry.user_id} → receiver ${receiverId}`);
+                    continue;
+                }
+
+                try {
+                    // Create PULL donation
+                    await this.createDonation(
+                        donorEntry.user_id,  // Real donor (not system user)
+                        receiverId,
+                        amount,
+                        DonationType.PULL
+                    );
+                    
+                    created++;
+                    this.logger.log(`[PULL] Created: donor ${donorEntry.user_id} (pos ${pos}) → receiver ${receiverId} (pos ${r})`);
+                    
+                } catch (error) {
+                    this.logger.error(`[PULL] Error creating donation: donor ${donorEntry.user_id} → receiver ${receiverId}:`, error);
+                }
+            }
+        }
+
+        this.logger.log(`[PULL] Level 1 cycle completed: ${created} donations created`);
+        return created;
+    }
+
+    /**
+     * Generate PULL donations for levels 2 and 3 using linear distribution
+     */
+    private async generatePullLinearForLevel(level: number, amount: number, count: number): Promise<number> {
+        let created = 0;
+        const systemUser = await this.usersRepository.findOne({ where: { role: UserRole.ADMIN } });
+        
+        this.logger.log(`[PULL] Generating ${count} linear PULL donations for level ${level}`);
         
         for (let i = 0; i < count; i++) {
             try {
                 const nextReceiver = await this.getNextReceiverInLevel(level);
                 
                 if (!nextReceiver || !nextReceiver.user_id) {
-                    this.logger.warn(`No receiver found for level ${level} PULL ${i + 1}`);
+                    this.logger.warn(`[PULL] No receiver found for level ${level} PULL ${i + 1}`);
                     continue;
                 }
                 
@@ -2582,10 +2748,11 @@ export class DonationsService {
                 created++;
                 
             } catch (error) {
-                this.logger.error(`Error creating PULL donation ${i + 1} for level ${level}:`, error);
+                this.logger.error(`[PULL] Error creating PULL donation ${i + 1} for level ${level}:`, error);
             }
         }
         
+        this.logger.log(`[PULL] Level ${level} linear completed: ${created} donations created`);
         return created;
     }
 
