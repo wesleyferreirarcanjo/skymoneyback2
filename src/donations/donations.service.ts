@@ -1737,7 +1737,7 @@ export class DonationsService {
             return; // Still has pending donations
         }
         
-        // All upgrade donations are complete! Advance level
+        // All upgrade donations are complete! Check if user should advance level
         const user = await this.usersRepository.findOne({ where: { id: donorId } });
         
         if (!user) {
@@ -1753,13 +1753,27 @@ export class DonationsService {
             return; // Already at max
         }
         
-        // Update user level
-        await this.updateUserLevel(donorId, newLevel);
+        // Check if user is already in next level queue (was added as first user)
+        const userQueues = await this.queueService.findByUserId(donorId);
+        const inNextLevel = userQueues.some(q => q.donation_number === newLevel);
         
-        this.logger.log(
-            `[LEVEL-UP] 🎉 User ${donorId} completed all upgrade payments! ` +
-            `Advanced from level ${currentLevel} to level ${newLevel}`
-        );
+        if (inNextLevel) {
+            // User was already added to next level (first user in that level)
+            // Safe to advance level now
+            await this.updateUserLevel(donorId, newLevel);
+            
+            this.logger.log(
+                `[LEVEL-UP] 🎉 User ${donorId} completed all upgrade payments! ` +
+                `Advanced from level ${currentLevel} to level ${newLevel} ` +
+                `(first user in level ${newLevel})`
+            );
+        } else {
+            // User not in next level yet - might need to wait for upgrade donation creation
+            this.logger.warn(
+                `[LEVEL-UP] User ${donorId} completed payments but not in level ${newLevel} queue yet. ` +
+                `This should not happen in normal flow.`
+            );
+        }
     }
 
     /**
