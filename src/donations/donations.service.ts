@@ -1673,18 +1673,30 @@ export class DonationsService {
      * NEW: User keeps same position when upgrading to next level
      */
     private async processLevelUpgradeWithPosition(userId: string, completedLevel: number): Promise<any[]> {
-        this.logger.log(`Processing level upgrade with position for user ${userId} from level ${completedLevel}`);
+        this.logger.log(`[UPGRADE] Processing level upgrade with position for user ${userId} from level ${completedLevel}`);
+        
+        // Validate userId
+        if (!userId) {
+            this.logger.error('[UPGRADE] userId is null or undefined!');
+            throw new Error('userId is required for upgrade');
+        }
+        
+        this.logger.log(`[UPGRADE] Fetching queues for user ${userId}`);
         
         // Get user's current position
         const userQueues = await this.queueService.findByUserId(userId);
+        
+        this.logger.log(`[UPGRADE] Found ${userQueues.length} queue entries for user ${userId}`);
+        
         const currentQueue = userQueues.find(q => q.donation_number === completedLevel);
         
         if (!currentQueue) {
+            this.logger.error(`[UPGRADE] User ${userId} not found in level ${completedLevel} queue. Available queues: ${JSON.stringify(userQueues.map(q => ({ level: q.donation_number, position: q.position })))}`);
             throw new Error(`User ${userId} not found in level ${completedLevel}`);
         }
         
         const userPosition = currentQueue.position;
-        this.logger.log(`User ${userId} is at position ${userPosition} in level ${completedLevel}`);
+        this.logger.log(`[UPGRADE] User ${userId} is at position ${userPosition} in level ${completedLevel}`);
         
         const createdDonations = [];
         
@@ -1812,14 +1824,23 @@ export class DonationsService {
         amount: number,
         position: number
     ): Promise<void> {
+        this.logger.log(`Creating upgrade donation for user ${userId} to level ${targetLevel} at position ${position}`);
+        
+        // Validate userId
+        if (!userId) {
+            throw new Error('userId is required for upgrade donation');
+        }
+        
         // Ensure user is in target level queue at the same position
         await this.ensureUserInQueueAtPosition(userId, targetLevel, position);
         
         // Get upgrade donation type
         const donationType = this.getUpgradeDonationType(targetLevel);
         
+        this.logger.log(`Creating donation with donor=${userId}, receiver=${userId}, amount=${amount}, type=${donationType}`);
+        
         // Create upgrade donation (user donates to themselves)
-        await this.createDonation(
+        const donation = await this.createDonation(
             userId,      // Donor: the user themselves
             userId,      // Receiver: the user themselves
             amount,
@@ -1827,7 +1848,7 @@ export class DonationsService {
         );
         
         this.logger.log(
-            `Created upgrade donation: ${amount} to level ${targetLevel} ` +
+            `Successfully created upgrade donation ${donation.id}: ${amount} to level ${targetLevel} ` +
             `at position ${position} for user ${userId}`
         );
     }
