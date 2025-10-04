@@ -411,6 +411,7 @@ export class DonationsController {
      * SkyMoney 2.0 - User accepts upgrade after completing a level
      */
     @Post('accept-upgrade')
+    @UseGuards(JwtAuthGuard)
     async acceptUpgrade(
         @Request() req,
         @Body() body: { from_level: number; to_level: number }

@@ -441,44 +441,68 @@ export class DonationsService {
         new_level: number;
         donations_created: any[];
     }> {
-        this.logger.log(`User ${userId} accepting upgrade from level ${fromLevel} to ${toLevel}`);
+        try {
+            this.logger.log(`User ${userId} accepting upgrade from level ${fromLevel} to ${toLevel}`);
 
-        // 1. Verify user completed the previous level
-        const completed = await this.checkLevelCompletion(userId, fromLevel);
+            // 1. Verify user exists
+            const user = await this.usersRepository.findOne({ where: { id: userId } });
+            if (!user) {
+                throw new NotFoundException('Usuário não encontrado');
+            }
 
-        if (!completed) {
-            throw new BadRequestException('Você ainda não completou este nível');
-        }
+            // 2. Verify user completed the previous level
+            const completed = await this.checkLevelCompletion(userId, fromLevel);
 
-        // 2. NEW: Verify if user can upgrade in order (sequential upgrades)
-        const canUpgrade = await this.canUserUpgradeInOrder(userId, fromLevel);
+            if (!completed) {
+                throw new BadRequestException('Você ainda não completou este nível');
+            }
 
-        if (!canUpgrade) {
+            // 3. NEW: Verify if user can upgrade in order (sequential upgrades)
+            const canUpgrade = await this.canUserUpgradeInOrder(userId, fromLevel);
+
+            if (!canUpgrade) {
+                throw new BadRequestException(
+                    'Aguarde os participantes anteriores fazerem upgrade primeiro. ' +
+                    'Upgrades devem ser feitos em ordem sequencial.'
+                );
+            }
+
+            // 4. Verify user hasn't already upgraded
+            if (user.current_level >= toLevel) {
+                throw new BadRequestException('Você já está neste nível ou superior');
+            }
+
+            // 5. Verify the upgrade path is valid
+            if (toLevel !== fromLevel + 1) {
+                throw new BadRequestException('Sequência de upgrade inválida');
+            }
+
+            // 6. Create upgrade and cascade donations (maintaining position)
+            const createdDonations = await this.processLevelUpgradeWithPosition(userId, fromLevel);
+
+            this.logger.log(`User ${userId} successfully upgraded from level ${fromLevel} to ${toLevel}`);
+
+            return {
+                message: 'Upgrade realizado com sucesso!',
+                new_level: toLevel,
+                donations_created: createdDonations,
+            };
+        } catch (error) {
+            this.logger.error(`Error in acceptUpgrade for user ${userId}:`, error);
+            
+            // Re-throw known exceptions
+            if (error instanceof BadRequestException || 
+                error instanceof NotFoundException || 
+                error instanceof ForbiddenException) {
+                throw error;
+            }
+            
+            // Log and throw generic error for unexpected issues
+            this.logger.error(`Unexpected error details:`, error.stack);
             throw new BadRequestException(
-                'Aguarde os participantes anteriores fazerem upgrade primeiro. ' +
-                'Upgrades devem ser feitos em ordem sequencial.'
+                `Erro ao processar upgrade: ${error.message || 'Erro desconhecido'}`
             );
         }
-
-        // 3. Verify user hasn't already upgraded
-        const user = await this.usersRepository.findOne({ where: { id: userId } });
-        if (user.current_level >= toLevel) {
-            throw new BadRequestException('Você já está neste nível ou superior');
-        }
-
-        // 4. Verify the upgrade path is valid
-        if (toLevel !== fromLevel + 1) {
-            throw new BadRequestException('Sequência de upgrade inválida');
-        }
-
-        // 5. Create upgrade and cascade donations (maintaining position)
-        const createdDonations = await this.processLevelUpgradeWithPosition(userId, fromLevel);
-
-        return {
-            message: 'Upgrade realizado com sucesso!',
-            new_level: toLevel,
-            donations_created: createdDonations,
-        };
     }
 
     /**
@@ -1838,26 +1862,36 @@ export class DonationsService {
      * Create cascade donation
      */
     private async createCascadeDonation(level: number, amount: number): Promise<void> {
-        const nextReceiver = await this.getNextReceiverInLevel(level);
-        
-        if (!nextReceiver) {
-            this.logger.warn(`No receiver found for level ${level} cascade`);
-            return;
+        try {
+            const nextReceiver = await this.getNextReceiverInLevel(level);
+            
+            if (!nextReceiver || !nextReceiver.user_id) {
+                this.logger.warn(`No receiver found for level ${level} cascade - skipping`);
+                return;
+            }
+            
+            const cascadeType = level === 1 ? DonationType.CASCADE_N1 : DonationType.PULL;
+            
+            // System donation (no specific donor)
+            const systemUser = await this.usersRepository.findOne({ where: { role: UserRole.ADMIN } });
+            
+            if (!systemUser) {
+                this.logger.warn('No admin user found, using receiver as donor for cascade');
+            }
+            
+            await this.createDonation(
+                systemUser?.id || nextReceiver.user_id,
+                nextReceiver.user_id,
+                amount,
+                cascadeType
+            );
+            
+            this.logger.log(`Created cascade donation: ${amount} for level ${level} to user ${nextReceiver.user_id}`);
+        } catch (error) {
+            this.logger.error(`Error creating cascade donation for level ${level}:`, error);
+            // Don't throw - cascade failure shouldn't block upgrade
+            this.logger.warn(`Continuing without cascade donation for level ${level}`);
         }
-        
-        const cascadeType = level === 1 ? DonationType.CASCADE_N1 : DonationType.PULL;
-        
-        // System donation (no specific donor)
-        const systemUser = await this.usersRepository.findOne({ where: { role: UserRole.ADMIN } });
-        
-        await this.createDonation(
-            systemUser?.id || nextReceiver.user_id,
-            nextReceiver.user_id,
-            amount,
-            cascadeType
-        );
-        
-        this.logger.log(`Created cascade donation: ${amount} for level ${level}`);
     }
 
     /**
