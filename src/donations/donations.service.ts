@@ -337,14 +337,29 @@ export class DonationsService {
 
         await this.donationsRepository.save(donation);
 
-        // Update receiver progress (but don't create upgrades automatically)
+        // Update receiver progress
         const level = this.getLevelByAmount(parseFloat(donation.amount.toString()));
         await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), level);
 
         // Check if level is completed
         const completed = await this.checkLevelCompletion(donation.receiver_id, level);
 
-        // If level is completed, return upgrade information (don't create donations yet)
+        // Special handling for CASCADE_N1: auto-create upgrade donations
+        if (completed && donation.type === DonationType.CASCADE_N1) {
+            this.logger.log(`[CASCADE] User ${userId} completed level via CASCADE_N1 - auto-creating upgrade donations`);
+            
+            // Process cascade completion (creates upgrade donations automatically)
+            await this.processCascadeN1Donation(donation);
+            
+            return {
+                message: 'Doação confirmada! Upgrade automático processado.',
+                level_completed: true,
+                completed_level: level,
+                auto_upgraded: true,
+            } as any;
+        }
+
+        // For PULL donations: let user choose upgrade
         if (completed) {
             const upgradeInfo = await this.getUpgradeInfo(donation.receiver_id, level);
 
@@ -631,29 +646,38 @@ export class DonationsService {
 
     /**
      * Process CASCADE_N1 donation (N1 cascade after user completes N1)
+     * Auto-creates upgrade donations when cascade completes a level
      */
     private async processCascadeN1Donation(donation: Donation): Promise<void> {
-        this.logger.log(`Processing CASCADE_N1 donation: ${donation.id}`);
+        this.logger.log(`[CASCADE] Processing CASCADE_N1 donation: ${donation.id} for user ${donation.receiver_id}`);
         
         try {
-            // 1. Update receiver progress in N1
-            await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), 1);
+            // Get user's position in N1
+            const userQueues = await this.queueService.findByUserId(donation.receiver_id);
+            const currentQueue = userQueues.find(q => q.donation_number === 1);
             
-            // 2. Check if completed N1
-            const completed = await this.checkLevelCompletion(donation.receiver_id, 1);
-            
-            if (completed) {
-                // 3. Create upgrade for N2 (R$ 200)
-                await this.createUpgradeDonation(donation.receiver_id, 2, 200);
-                
-                // 4. Create cascade N1 (R$ 100) for next participant
-                await this.createCascadeDonation(1, 100);
-                
-                // 5. Update user level
-                await this.updateUserLevel(donation.receiver_id, 2);
+            if (!currentQueue) {
+                this.logger.error(`[CASCADE] User ${donation.receiver_id} not found in N1 queue`);
+                return;
             }
+            
+            const userPosition = currentQueue.position;
+            this.logger.log(`[CASCADE] User ${donation.receiver_id} at position ${userPosition} in N1`);
+            
+            // Create upgrade to N2 (R$ 200) - maintains position
+            await this.createUpgradeDonationWithPosition(donation.receiver_id, 2, 200, userPosition);
+            this.logger.log(`[CASCADE] Created upgrade donation for user ${donation.receiver_id} to N2`);
+            
+            // Create cascade N1 (R$ 100) for next participant
+            await this.createCascadeDonation(1, 100);
+            this.logger.log(`[CASCADE] Created next cascade for N1`);
+            
+            // Update user level
+            await this.updateUserLevel(donation.receiver_id, 2);
+            this.logger.log(`[CASCADE] Updated user ${donation.receiver_id} to level 2`);
+            
         } catch (error) {
-            this.logger.error(`Error processing CASCADE_N1 donation ${donation.id}:`, error);
+            this.logger.error(`[CASCADE] Error processing CASCADE_N1 donation ${donation.id}:`, error);
             throw error;
         }
     }
