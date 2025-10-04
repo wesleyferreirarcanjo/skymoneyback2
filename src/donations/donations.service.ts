@@ -434,6 +434,7 @@ export class DonationsService {
     /**
      * Accept upgrade to next level (user decision)
      * This is the trigger that creates upgrade and cascade donations
+     * NEW: Upgrades must be done in sequential order by position
      */
     async acceptUpgrade(userId: string, fromLevel: number, toLevel: number): Promise<{
         message: string;
@@ -449,25 +450,86 @@ export class DonationsService {
             throw new BadRequestException('Você ainda não completou este nível');
         }
 
-        // 2. Verify user hasn't already upgraded
+        // 2. NEW: Verify if user can upgrade in order (sequential upgrades)
+        const canUpgrade = await this.canUserUpgradeInOrder(userId, fromLevel);
+
+        if (!canUpgrade) {
+            throw new BadRequestException(
+                'Aguarde os participantes anteriores fazerem upgrade primeiro. ' +
+                'Upgrades devem ser feitos em ordem sequencial.'
+            );
+        }
+
+        // 3. Verify user hasn't already upgraded
         const user = await this.usersRepository.findOne({ where: { id: userId } });
         if (user.current_level >= toLevel) {
             throw new BadRequestException('Você já está neste nível ou superior');
         }
 
-        // 3. Verify the upgrade path is valid
+        // 4. Verify the upgrade path is valid
         if (toLevel !== fromLevel + 1) {
             throw new BadRequestException('Sequência de upgrade inválida');
         }
 
-        // 4. Create upgrade and cascade donations
-        const createdDonations = await this.processLevelUpgrade(userId, fromLevel);
+        // 5. Create upgrade and cascade donations (maintaining position)
+        const createdDonations = await this.processLevelUpgradeWithPosition(userId, fromLevel);
 
         return {
             message: 'Upgrade realizado com sucesso!',
             new_level: toLevel,
             donations_created: createdDonations,
         };
+    }
+
+    /**
+     * Check if user can upgrade in order (sequential upgrades by position)
+     * Only allows upgrade if all previous users in queue have either:
+     * - Not completed the level yet, OR
+     * - Already upgraded to next level
+     */
+    private async canUserUpgradeInOrder(userId: string, fromLevel: number): Promise<boolean> {
+        // Get user's position in current level
+        const userQueues = await this.queueService.findByUserId(userId);
+        const userQueue = userQueues.find(q => q.donation_number === fromLevel);
+        
+        if (!userQueue) {
+            this.logger.warn(`User ${userId} not found in level ${fromLevel} queue`);
+            return false;
+        }
+        
+        const userPosition = userQueue.position;
+        
+        // Get all users in the same level
+        const allInLevel = await this.queueService.findByDonationNumber(fromLevel);
+        
+        // Find users before this user in queue
+        const usersBeforeInQueue = allInLevel
+            .filter(q => q.user_id && q.position < userPosition)
+            .sort((a, b) => a.position - b.position);
+        
+        // Check each previous user
+        for (const prevQueue of usersBeforeInQueue) {
+            // If they completed the level
+            if (prevQueue.level_completed) {
+                // Check if they already upgraded
+                const prevUser = await this.usersRepository.findOne({ 
+                    where: { id: prevQueue.user_id } 
+                });
+                
+                // If still at the same level (haven't upgraded yet)
+                if (prevUser && prevUser.current_level === fromLevel) {
+                    this.logger.log(
+                        `User ${userId} (position ${userPosition}) cannot upgrade yet. ` +
+                        `User ${prevUser.id} (position ${prevQueue.position}) completed but hasn't upgraded.`
+                    );
+                    return false;
+                }
+            }
+        }
+        
+        // No previous user is blocking the upgrade
+        this.logger.log(`User ${userId} (position ${userPosition}) can upgrade - all previous users cleared`);
+        return true;
     }
 
     /**
@@ -1583,8 +1645,86 @@ export class DonationsService {
     }
 
     /**
+     * Process level upgrade maintaining user position in queue
+     * NEW: User keeps same position when upgrading to next level
+     */
+    private async processLevelUpgradeWithPosition(userId: string, completedLevel: number): Promise<any[]> {
+        this.logger.log(`Processing level upgrade with position for user ${userId} from level ${completedLevel}`);
+        
+        // Get user's current position
+        const userQueues = await this.queueService.findByUserId(userId);
+        const currentQueue = userQueues.find(q => q.donation_number === completedLevel);
+        
+        if (!currentQueue) {
+            throw new Error(`User ${userId} not found in level ${completedLevel}`);
+        }
+        
+        const userPosition = currentQueue.position;
+        this.logger.log(`User ${userId} is at position ${userPosition} in level ${completedLevel}`);
+        
+        const createdDonations = [];
+        
+        switch (completedLevel) {
+            case 1:
+                // Create upgrade to N2 (R$ 200) - maintains position
+                await this.createUpgradeDonationWithPosition(userId, 2, 200, userPosition);
+                createdDonations.push({ 
+                    type: 'upgrade', 
+                    level: 2, 
+                    amount: 200,
+                    position: userPosition 
+                });
+                
+                // Create cascade N1 (R$ 100)
+                await this.createCascadeDonation(1, 100);
+                createdDonations.push({ type: 'cascade', level: 1, amount: 100 });
+                
+                // Update user level
+                await this.updateUserLevel(userId, 2);
+                break;
+                
+            case 2:
+                // Create upgrade to N3 (R$ 1.600) - maintains position
+                await this.createUpgradeDonationWithPosition(userId, 3, 1600, userPosition);
+                createdDonations.push({ 
+                    type: 'upgrade', 
+                    level: 3, 
+                    amount: 1600,
+                    position: userPosition 
+                });
+                
+                // Create reinjection N2 (R$ 2.000)
+                await this.createReinjectionDonations(2, 2000);
+                createdDonations.push({ type: 'reinjection', level: 2, amount: 2000 });
+                
+                // Check package 8k
+                await this.checkAndTriggerPackage8k();
+                
+                // Update user level
+                await this.updateUserLevel(userId, 3);
+                break;
+                
+            case 3:
+                // Mark user for reentry
+                await this.markUserForReentry(userId);
+                createdDonations.push({ type: 'reentry_enabled', level: 3 });
+                
+                // Create final cascade
+                await this.createCascadeDonation(3, 8000);
+                createdDonations.push({ type: 'final_cascade', level: 3, amount: 8000 });
+                break;
+                
+            default:
+                this.logger.warn(`Unknown level for upgrade: ${completedLevel}`);
+        }
+        
+        return createdDonations;
+    }
+
+    /**
      * Process level upgrade (create upgrade donation and cascade)
      * Returns the donations created
+     * @deprecated Use processLevelUpgradeWithPosition instead
      */
     private async processLevelUpgrade(userId: string, completedLevel: number): Promise<any[]> {
         this.logger.log(`Processing level upgrade for user ${userId} from level ${completedLevel}`);
@@ -1639,7 +1779,38 @@ export class DonationsService {
     }
 
     /**
+     * Create upgrade donation maintaining user position in next level
+     * NEW: User upgrades to themselves at the same position
+     */
+    private async createUpgradeDonationWithPosition(
+        userId: string, 
+        targetLevel: number, 
+        amount: number,
+        position: number
+    ): Promise<void> {
+        // Ensure user is in target level queue at the same position
+        await this.ensureUserInQueueAtPosition(userId, targetLevel, position);
+        
+        // Get upgrade donation type
+        const donationType = this.getUpgradeDonationType(targetLevel);
+        
+        // Create upgrade donation (user donates to themselves)
+        await this.createDonation(
+            userId,      // Donor: the user themselves
+            userId,      // Receiver: the user themselves
+            amount,
+            donationType
+        );
+        
+        this.logger.log(
+            `Created upgrade donation: ${amount} to level ${targetLevel} ` +
+            `at position ${position} for user ${userId}`
+        );
+    }
+
+    /**
      * Create upgrade donation to next level
+     * @deprecated Use createUpgradeDonationWithPosition instead
      */
     private async createUpgradeDonation(userId: string, targetLevel: number, amount: number): Promise<void> {
         const nextReceiver = await this.getNextReceiverInLevel(targetLevel);
@@ -1721,7 +1892,49 @@ export class DonationsService {
     }
 
     /**
+     * Ensure user is in queue at a specific position
+     * NEW: Allows placing user at exact position (for upgrades)
+     */
+    private async ensureUserInQueueAtPosition(
+        userId: string, 
+        level: number, 
+        position: number
+    ): Promise<void> {
+        const existingQueues = await this.queueService.findByUserId(userId);
+        const alreadyInLevel = existingQueues.some(q => q.donation_number === level);
+        
+        if (!alreadyInLevel) {
+            // Check if position is already taken
+            const allInLevel = await this.queueService.findByDonationNumber(level);
+            const positionTaken = allInLevel.find(q => q.position === position);
+            
+            if (positionTaken) {
+                this.logger.warn(
+                    `Position ${position} in level ${level} is already taken by user ${positionTaken.user_id}. ` +
+                    `This should not happen with sequential upgrades.`
+                );
+                // In case of conflict, find next available position
+                const maxPosition = Math.max(...allInLevel.map(q => q.position), position);
+                position = maxPosition + 1;
+                this.logger.log(`Using next available position: ${position}`);
+            }
+            
+            // Add user to queue at specified position
+            await this.dataSource.query(
+                `INSERT INTO queue (user_id, donation_number, position, level, donations_required, is_receiver, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, false, NOW(), NOW())`,
+                [userId, level, position, level, this.getRequiredDonationsForLevel(level)]
+            );
+            
+            this.logger.log(`Added user ${userId} to level ${level} queue at position ${position}`);
+        } else {
+            this.logger.log(`User ${userId} already exists in level ${level} queue`);
+        }
+    }
+
+    /**
      * Ensure user is in queue for a specific level
+     * @deprecated Use ensureUserInQueueAtPosition for upgrades
      */
     private async ensureUserInQueue(userId: string, level: number): Promise<void> {
         const existingQueues = await this.queueService.findByUserId(userId);

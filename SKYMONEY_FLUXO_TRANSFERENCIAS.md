@@ -231,6 +231,8 @@ Processo: Mantém fluxo após encerramento do N2
 4. **Reentrada**: Participantes podem reiniciar após completar N3
 5. **Capacidade fixa**: 100 participantes por grupo
 6. **Transparência**: Todas as transferências são rastreáveis via sistema
+7. **⭐ NOVO - Upgrade em Cascata**: Upgrades devem ser feitos em ordem sequencial de posição
+8. **⭐ NOVO - Manutenção de Posição**: Usuário mantém a mesma posição ao fazer upgrade entre níveis
 
 ---
 
@@ -253,10 +255,42 @@ Processo: Mantém fluxo após encerramento do N2
 - `EXPIRED`: Expirada
 - `CANCELLED`: Cancelada
 
+### **Sistema de Upgrades (NOVO)**
+
+#### **Regra 1: Upgrades em Ordem Sequencial**
+- Upgrades devem ser feitos respeitando a ordem da fila
+- Usuário só pode fazer upgrade se todos anteriores:
+  - Não completaram o nível ainda, OU
+  - Já fizeram upgrade para o próximo nível
+- Exemplo:
+  - ✅ #001 completou → pode fazer upgrade
+  - ✅ #002 completou → pode fazer upgrade (se #001 já fez)
+  - ❌ #005 completou → NÃO pode upgrade (se #003 completou mas não fez upgrade)
+
+#### **Regra 2: Manutenção de Posição**
+- Ao fazer upgrade, usuário mantém a mesma posição
+- Exemplo:
+  - Usuário #010 no N1 → Faz upgrade → Vira #010 no N2
+  - Usuário #025 no N2 → Faz upgrade → Vira #025 no N3
+- Posição é preservada através dos níveis
+
+#### **Regra 3: Upgrade para Si Mesmo**
+- Doação de upgrade é do usuário para ele mesmo
+- Donor = Receiver = Usuário que está fazendo upgrade
+- Isso marca que o upgrade foi concluído
+
 ### **Processamento Automático**
 Após confirmação de uma doação, o sistema automaticamente:
 1. Executa regras de negócio específicas por tipo
-2. Gera novas doações quando necessário
-3. Atualiza posições na fila
-4. Processa upgrades e cascatas
+2. Atualiza progresso do usuário no nível
+3. Verifica se nível foi completado
+4. **NOVO**: Retorna informação de upgrade disponível (usuário decide)
 5. Notifica participantes afetados
+
+### **Processamento Manual (Decisão do Usuário)**
+Quando usuário completa um nível:
+1. Sistema informa que upgrade está disponível
+2. Sistema verifica se pode fazer upgrade (ordem sequencial)
+3. Usuário decide aceitar ou aguardar
+4. Se aceitar E estiver na ordem: cria doações de upgrade e cascata
+5. Usuário é adicionado ao próximo nível na mesma posição
