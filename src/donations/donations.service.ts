@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { UserRole } from '../users/entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { Donation, DonationStatus, DonationType } from './entities/donation.entity';
 import { User } from '../users/entities/user.entity';
 import { FileUploadService } from '../common/services/file-upload.service';
@@ -337,6 +337,9 @@ export class DonationsService {
 
         await this.donationsRepository.save(donation);
 
+        // Check if DONOR completed paying all upgrade donations (advances level)
+        await this.checkDonorUpgradeCompletion(donation);
+
         // Update receiver progress
         const level = this.getLevelByAmount(parseFloat(donation.amount.toString()));
         await this.updateReceiverProgress(donation.receiver_id, parseFloat(donation.amount.toString()), level);
@@ -367,9 +370,8 @@ export class DonationsService {
                 await this.createUserCascadeDonation(donation.receiver_id, 1, 100);
                 this.logger.log(`[AUTO-UPGRADE] Created cascade from user ${donation.receiver_id} to next participant in N1`);
                 
-                // Update user level
-                await this.updateUserLevel(donation.receiver_id, 2);
-                this.logger.log(`[AUTO-UPGRADE] Updated user ${donation.receiver_id} to level 2`);
+                // NOTE: User level will be updated when they CONFIRM payment of upgrade donation
+                // Don't update level here - user needs to PAY first!
             }
             
             return {
@@ -693,9 +695,8 @@ export class DonationsService {
             await this.createUserCascadeDonation(donation.receiver_id, 1, 100);
             this.logger.log(`[CASCADE] Created cascade from user ${donation.receiver_id} to next participant`);
             
-            // Update user level
-            await this.updateUserLevel(donation.receiver_id, 2);
-            this.logger.log(`[CASCADE] Updated user ${donation.receiver_id} to level 2`);
+            // NOTE: User level will be updated when they PAY and CONFIRM the upgrade donation
+            this.logger.log(`[CASCADE] User ${donation.receiver_id} must now pay upgrade donations to advance to level 2`);
             
         } catch (error) {
             this.logger.error(`[CASCADE] Error processing CASCADE_N1 donation ${donation.id}:`, error);
@@ -1685,6 +1686,80 @@ export class DonationsService {
         );
         
         this.logger.log(`Updated progress for user ${userId} in level ${level}: ${newDonationsReceived}/${this.getRequiredDonationsForLevel(level)} donations`);
+    }
+
+    /**
+     * Check if DONOR completed paying all upgrade donations from a level
+     * This advances the user to the next level
+     */
+    private async checkDonorUpgradeCompletion(donation: Donation): Promise<void> {
+        // Only check for UPGRADE and CASCADE donations
+        const upgradeTypes = [
+            DonationType.UPGRADE_N2,
+            DonationType.CASCADE_N1,
+            DonationType.UPGRADE_N3,
+            DonationType.REINJECTION_N2
+        ];
+        
+        if (!upgradeTypes.includes(donation.type)) {
+            return; // Not an upgrade-related donation
+        }
+        
+        const donorId = donation.donor_id;
+        
+        this.logger.log(
+            `[LEVEL-UP] Checking if donor ${donorId} completed all upgrade payments ` +
+            `after confirming ${donation.type}`
+        );
+        
+        // Find all pending upgrade donations from this donor
+        const pendingUpgrades = await this.donationsRepository.find({
+            where: {
+                donor_id: donorId,
+                type: In([
+                    DonationType.UPGRADE_N2,
+                    DonationType.CASCADE_N1,
+                    DonationType.UPGRADE_N3,
+                    DonationType.REINJECTION_N2
+                ]),
+                status: In([
+                    DonationStatus.PENDING_PAYMENT,
+                    DonationStatus.PENDING_CONFIRMATION
+                ])
+            }
+        });
+        
+        if (pendingUpgrades.length > 0) {
+            this.logger.log(
+                `[LEVEL-UP] Donor ${donorId} still has ${pendingUpgrades.length} ` +
+                `pending upgrade donations - not advancing level yet`
+            );
+            return; // Still has pending donations
+        }
+        
+        // All upgrade donations are complete! Advance level
+        const user = await this.usersRepository.findOne({ where: { id: donorId } });
+        
+        if (!user) {
+            this.logger.warn(`[LEVEL-UP] User ${donorId} not found`);
+            return;
+        }
+        
+        const currentLevel = user.current_level;
+        const newLevel = currentLevel + 1;
+        
+        if (newLevel > 3) {
+            this.logger.log(`[LEVEL-UP] User ${donorId} already at max level`);
+            return; // Already at max
+        }
+        
+        // Update user level
+        await this.updateUserLevel(donorId, newLevel);
+        
+        this.logger.log(
+            `[LEVEL-UP] 🎉 User ${donorId} completed all upgrade payments! ` +
+            `Advanced from level ${currentLevel} to level ${newLevel}`
+        );
     }
 
     /**
