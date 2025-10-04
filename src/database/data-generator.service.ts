@@ -73,7 +73,7 @@ export class DataGeneratorService {
     let successCount = 0;
     let errorCount = 0;
 
-    for (let i = 1; i <= 98; i++) {
+    for (let i = 1; i <= 102; i++) {
       try {
         const firstName = firstNames[i % firstNames.length];
         const lastName = lastNames[i % lastNames.length];
