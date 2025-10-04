@@ -83,7 +83,7 @@ export class UsersController {
   @Post('profile/avatar/upload')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
-  uploadAvatarFile(@Request() req, @UploadedFile() file: Express.Multer.File) {
+  uploadAvatarFile(@Request() req, @UploadedFile() file: any) {
     return this.usersService.updateAvatarFile(req.user.id, file);
   }
 }
