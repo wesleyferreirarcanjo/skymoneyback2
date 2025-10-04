@@ -1774,8 +1774,9 @@ export class DonationsService {
                     position: userPosition 
                 });
                 
-                // Create reinjection N2 (R$ 2.000)
-                await this.createReinjectionDonations(2, 2000);
+                // Create reinjection N2 (R$ 2.000 = 10 donations of R$ 200)
+                // User who completed N2 pays the reinjection back to N2
+                await this.createUserReinjectionDonations(userId, 2, 2000);
                 createdDonations.push({ type: 'reinjection', level: 2, amount: 2000 });
                 
                 // Check package 8k
@@ -2053,7 +2054,53 @@ export class DonationsService {
     }
 
     /**
-     * Create reinjection donations
+     * Create reinjection donations FROM A SPECIFIC USER (who completed N2)
+     * User pays R$2.000 (10x R$200) back to N2 to help others complete
+     */
+    private async createUserReinjectionDonations(donorUserId: string, level: number, totalAmount: number): Promise<void> {
+        const donationAmount = level === 2 ? 200 : 1600;
+        const numberOfDonations = Math.floor(totalAmount / donationAmount);
+        
+        this.logger.log(
+            `[REINJECTION] Creating ${numberOfDonations} reinjection donations of ${donationAmount} ` +
+            `from user ${donorUserId} to level ${level}`
+        );
+        
+        // Create 10 donations of R$200 to next receivers in N2
+        for (let i = 0; i < numberOfDonations; i++) {
+            const nextReceiver = await this.getNextReceiverInLevel(level);
+            
+            if (!nextReceiver || !nextReceiver.user_id) {
+                this.logger.warn(
+                    `[REINJECTION] No receiver found for level ${level} reinjection ${i + 1}/${numberOfDonations} ` +
+                    `from user ${donorUserId} - skipping remaining`
+                );
+                break;
+            }
+            
+            this.logger.log(
+                `[REINJECTION] Creating reinjection ${i + 1}/${numberOfDonations}: ` +
+                `donor=${donorUserId}, receiver=${nextReceiver.user_id} (pos ${nextReceiver.position}), ` +
+                `amount=${donationAmount}`
+            );
+            
+            await this.createDonation(
+                donorUserId,              // User who completed N2
+                nextReceiver.user_id,     // Next in line in N2
+                donationAmount,
+                DonationType.REINJECTION_N2
+            );
+        }
+        
+        this.logger.log(
+            `[REINJECTION] Successfully created ${numberOfDonations} reinjection donations ` +
+            `from user ${donorUserId} to level ${level}`
+        );
+    }
+
+    /**
+     * Create reinjection donations from SYSTEM/ADMIN
+     * @deprecated Use createUserReinjectionDonations for proper flow
      */
     private async createReinjectionDonations(level: number, totalAmount: number): Promise<void> {
         const donationAmount = level === 2 ? 200 : 1600;
