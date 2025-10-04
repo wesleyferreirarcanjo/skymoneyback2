@@ -344,12 +344,32 @@ export class DonationsService {
         // Check if level is completed
         const completed = await this.checkLevelCompletion(donation.receiver_id, level);
 
-        // Special handling for CASCADE_N1: auto-create upgrade donations
-        if (completed && donation.type === DonationType.CASCADE_N1) {
-            this.logger.log(`[CASCADE] User ${userId} completed level via CASCADE_N1 - auto-creating upgrade donations`);
+        // Auto-create upgrade donations for N1 completions (ALL types)
+        // This creates the cascade effect described in the specification
+        if (completed && level === 1) {
+            this.logger.log(`[AUTO-UPGRADE] User ${userId} completed level 1 - auto-creating upgrade and cascade`);
             
-            // Process cascade completion (creates upgrade donations automatically)
-            await this.processCascadeN1Donation(donation);
+            // Get user's position in N1
+            const userQueues = await this.queueService.findByUserId(donation.receiver_id);
+            const currentQueue = userQueues.find(q => q.donation_number === 1);
+            
+            if (!currentQueue) {
+                this.logger.error(`[AUTO-UPGRADE] User ${donation.receiver_id} not found in N1 queue`);
+            } else {
+                const userPosition = currentQueue.position;
+                
+                // Create upgrade to N2 (R$ 200) - maintains position
+                await this.createUpgradeDonationWithPosition(donation.receiver_id, 2, 200, userPosition);
+                this.logger.log(`[AUTO-UPGRADE] Created upgrade donation for user ${donation.receiver_id} to N2`);
+                
+                // Create cascade N1 (R$ 100) for next participant
+                await this.createCascadeDonation(1, 100);
+                this.logger.log(`[AUTO-UPGRADE] Created cascade for next participant in N1`);
+                
+                // Update user level
+                await this.updateUserLevel(donation.receiver_id, 2);
+                this.logger.log(`[AUTO-UPGRADE] Updated user ${donation.receiver_id} to level 2`);
+            }
             
             return {
                 message: 'Doação confirmada! Upgrade automático processado.',
@@ -359,7 +379,7 @@ export class DonationsService {
             } as any;
         }
 
-        // For PULL donations: let user choose upgrade
+        // For N2 and N3: let user choose upgrade
         if (completed) {
             const upgradeInfo = await this.getUpgradeInfo(donation.receiver_id, level);
 
