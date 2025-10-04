@@ -1973,7 +1973,8 @@ export class DonationsService {
         const donationType = this.getUpgradeDonationType(targetLevel);
         
         // Find next receiver in target level (who will receive this upgrade donation)
-        const nextReceiver = await this.getNextReceiverInLevel(targetLevel);
+        // EXCLUDE the user who is upgrading to prevent self-donation
+        const nextReceiver = await this.getNextReceiverInLevel(targetLevel, userId);
         
         if (!nextReceiver || !nextReceiver.user_id) {
             // No one to receive yet - user is first in this level
@@ -2078,6 +2079,15 @@ export class DonationsService {
                 return;
             }
             
+            // Prevent self-donation in cascade
+            if (receiverQueue.user_id === donorUserId) {
+                this.logger.warn(
+                    `[CASCADE] Cascade would create self-donation for user ${donorUserId} ` +
+                    `(donor position ${donorPosition} → receiver position ${receiverPosition}) - skipping`
+                );
+                return;
+            }
+            
             const cascadeType = level === 1 ? DonationType.CASCADE_N1 : DonationType.PULL;
             
             this.logger.log(
@@ -2156,8 +2166,9 @@ export class DonationsService {
         );
         
         // Create 10 donations of R$200 to next receivers in N2
+        // EXCLUDE the donor to prevent self-donation
         for (let i = 0; i < numberOfDonations; i++) {
-            const nextReceiver = await this.getNextReceiverInLevel(level);
+            const nextReceiver = await this.getNextReceiverInLevel(level, donorUserId);
             
             if (!nextReceiver || !nextReceiver.user_id) {
                 this.logger.warn(
@@ -2282,12 +2293,13 @@ export class DonationsService {
     }
 
     /**
-     * Get next receiver in level queue
+     * Get next receiver in level queue (excluding specific user if provided)
      */
-    private async getNextReceiverInLevel(level: number): Promise<any> {
+    private async getNextReceiverInLevel(level: number, excludeUserId?: string): Promise<any> {
         const queues = await this.queueService.findByDonationNumber(level);
         const sortedQueues = queues
             .filter(q => q.user_id && !q.level_completed)
+            .filter(q => !excludeUserId || q.user_id !== excludeUserId) // Exclude specific user
             .sort((a, b) => a.position - b.position);
         
         return sortedQueues[0] || null;
