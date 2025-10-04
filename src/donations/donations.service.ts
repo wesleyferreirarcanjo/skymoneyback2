@@ -338,7 +338,10 @@ export class DonationsService {
         await this.donationsRepository.save(donation);
 
         // Check if DONOR completed paying all upgrade donations (advances level)
-        await this.checkDonorUpgradeCompletion(donation);
+        // Only check when the donation is CONFIRMED (receiver confirmed payment)
+        if (donation.status === DonationStatus.CONFIRMED) {
+            await this.checkDonorUpgradeCompletion(donation);
+        }
 
         // Update receiver progress
         const level = this.getLevelByAmount(parseFloat(donation.amount.toString()));
@@ -740,7 +743,7 @@ export class DonationsService {
                 await this.createUpgradeDonation(donation.receiver_id, 3, 1600);
                 
                 // 4. Create reinjection N2 (R$ 2.000 = 10 donations of R$ 200)
-                await this.createReinjectionDonations(2, 2000);
+                await this.createUserReinjectionDonations(donation.receiver_id, 2, 2000);
                 
                 // 5. Check and trigger package 8k (every 5 upgrades)
                 await this.checkAndTriggerPackage8k();
@@ -784,6 +787,7 @@ export class DonationsService {
             
             if (n2Active) {
                 // 2. Reinject to N2
+                // Note: This should use system user for reinforcement (not user-specific)
                 await this.createReinjectionDonations(2, parseFloat(donation.amount.toString()));
                 this.logger.log(`Reinforcement sent to N2: ${donation.amount}`);
             } else {
@@ -834,7 +838,7 @@ export class DonationsService {
                 await this.markUserForReentry(donation.receiver_id);
                 
                 // 4. Create final cascade N3 (R$ 8.000)
-                await this.createCascadeDonation(3, 8000);
+                await this.createUserCascadeDonation(donation.receiver_id, 3, 8000);
                 
                 this.logger.log(`User ${donation.receiver_id} completed N3! R$ 32.000 earned.`);
             }
@@ -1753,13 +1757,13 @@ export class DonationsService {
             return; // Already at max
         }
         
-        // Check if user is already in next level queue (was added as first user)
+        // CRITICAL: Check if user is already in next level queue (was added as first user)
         const userQueues = await this.queueService.findByUserId(donorId);
         const inNextLevel = userQueues.some(q => q.donation_number === newLevel);
         
         if (inNextLevel) {
             // User was already added to next level (first user in that level)
-            // Safe to advance level now
+            // Safe to advance level now - ALL payments are complete!
             await this.updateUserLevel(donorId, newLevel);
             
             this.logger.log(
@@ -1768,10 +1772,11 @@ export class DonationsService {
                 `(first user in level ${newLevel})`
             );
         } else {
-            // User not in next level yet - might need to wait for upgrade donation creation
+            // User not in next level yet - this means they haven't been added yet
+            // This should only happen if they haven't completed the level that triggers upgrade
             this.logger.warn(
                 `[LEVEL-UP] User ${donorId} completed payments but not in level ${newLevel} queue yet. ` +
-                `This should not happen in normal flow.`
+                `This suggests they haven't completed level ${currentLevel} properly.`
             );
         }
     }
@@ -1845,8 +1850,8 @@ export class DonationsService {
                     position: userPosition 
                 });
                 
-                // Create cascade N1 (R$ 100)
-                await this.createCascadeDonation(1, 100);
+                // Create cascade N1 (R$ 100) from THIS USER
+                await this.createUserCascadeDonation(userId, 1, 100);
                 createdDonations.push({ type: 'cascade', level: 1, amount: 100 });
                 
                 // Update user level
@@ -1881,7 +1886,7 @@ export class DonationsService {
                 createdDonations.push({ type: 'reentry_enabled', level: 3 });
                 
                 // Create final cascade
-                await this.createCascadeDonation(3, 8000);
+                await this.createUserCascadeDonation(userId, 3, 8000);
                 createdDonations.push({ type: 'final_cascade', level: 3, amount: 8000 });
                 break;
                 
@@ -1909,7 +1914,7 @@ export class DonationsService {
                 createdDonations.push({ type: 'upgrade', level: 2, amount: 200 });
                 
                 // Create cascade N1 (R$ 100)
-                await this.createCascadeDonation(1, 100);
+                await this.createUserCascadeDonation(userId, 1, 100);
                 createdDonations.push({ type: 'cascade', level: 1, amount: 100 });
                 
                 // Update user level
@@ -1921,8 +1926,8 @@ export class DonationsService {
                 await this.createUpgradeDonation(userId, 3, 1600);
                 createdDonations.push({ type: 'upgrade', level: 3, amount: 1600 });
                 
-                // Create reinjection N2 (R$ 2.000)
-                await this.createReinjectionDonations(2, 2000);
+                // Create reinjection N2 (R$ 2.000) from THIS USER
+                await this.createUserReinjectionDonations(userId, 2, 2000);
                 createdDonations.push({ type: 'reinjection', level: 2, amount: 2000 });
                 
                 // Check package 8k
@@ -1938,7 +1943,7 @@ export class DonationsService {
                 createdDonations.push({ type: 'reentry_enabled', level: 3 });
                 
                 // Create final cascade
-                await this.createCascadeDonation(3, 8000);
+                await this.createUserCascadeDonation(userId, 3, 8000);
                 createdDonations.push({ type: 'final_cascade', level: 3, amount: 8000 });
                 break;
                 
@@ -2365,6 +2370,7 @@ export class DonationsService {
         
         // Trigger package 8k every 5 upgrades
         if (recentUpgrades > 0 && recentUpgrades % 5 === 0) {
+            // Note: Package 8k uses system user (correct for admin-triggered events)
             await this.createReinjectionDonations(2, 8000);
             this.logger.log(`🎉 Triggered package 8k after ${recentUpgrades} upgrades!`);
         }
