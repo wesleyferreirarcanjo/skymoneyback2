@@ -1816,7 +1816,10 @@ export class DonationsService {
 
     /**
      * Create upgrade donation maintaining user position in next level
-     * NEW: User upgrades to themselves at the same position
+     * NEW LOGIC:
+     * - User who upgrades is the DONOR
+     * - Next user in line in target level is the RECEIVER
+     * - User is added to target level queue at same position
      */
     private async createUpgradeDonationWithPosition(
         userId: string, 
@@ -1824,32 +1827,50 @@ export class DonationsService {
         amount: number,
         position: number
     ): Promise<void> {
-        this.logger.log(`Creating upgrade donation for user ${userId} to level ${targetLevel} at position ${position}`);
+        this.logger.log(`[UPGRADE] Creating upgrade donation for user ${userId} to level ${targetLevel} at position ${position}`);
         
         // Validate userId
         if (!userId) {
             throw new Error('userId is required for upgrade donation');
         }
         
-        // Ensure user is in target level queue at the same position
-        await this.ensureUserInQueueAtPosition(userId, targetLevel, position);
-        
         // Get upgrade donation type
         const donationType = this.getUpgradeDonationType(targetLevel);
         
-        this.logger.log(`Creating donation with donor=${userId}, receiver=${userId}, amount=${amount}, type=${donationType}`);
+        // Find next receiver in target level (who will receive this upgrade donation)
+        const nextReceiver = await this.getNextReceiverInLevel(targetLevel);
         
-        // Create upgrade donation (user donates to themselves)
+        if (!nextReceiver || !nextReceiver.user_id) {
+            // No one to receive yet - user is first in this level
+            this.logger.log(`[UPGRADE] User ${userId} is first in level ${targetLevel}, no upgrade donation needed`);
+            
+            // Just add user to queue at position
+            await this.ensureUserInQueueAtPosition(userId, targetLevel, position);
+            return;
+        }
+        
+        // Add user to target level queue at same position
+        await this.ensureUserInQueueAtPosition(userId, targetLevel, position);
+        
+        this.logger.log(
+            `[UPGRADE] Creating donation: donor=${userId} (upgrading user), ` +
+            `receiver=${nextReceiver.user_id} (next in line), amount=${amount}, type=${donationType}`
+        );
+        
+        // Create upgrade donation:
+        // - DONOR: User who is upgrading (paying the upgrade)
+        // - RECEIVER: Next user in line in target level
         const donation = await this.createDonation(
-            userId,      // Donor: the user themselves
-            userId,      // Receiver: the user themselves
+            userId,                  // Donor: user who is upgrading
+            nextReceiver.user_id,    // Receiver: next user in target level
             amount,
             donationType
         );
         
         this.logger.log(
-            `Successfully created upgrade donation ${donation.id}: ${amount} to level ${targetLevel} ` +
-            `at position ${position} for user ${userId}`
+            `[UPGRADE] Successfully created upgrade donation ${donation.id}: ` +
+            `${amount} from user ${userId} to user ${nextReceiver.user_id} ` +
+            `(position ${nextReceiver.position}) in level ${targetLevel}`
         );
     }
 

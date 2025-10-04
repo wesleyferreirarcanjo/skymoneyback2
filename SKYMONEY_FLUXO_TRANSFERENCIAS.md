@@ -274,10 +274,11 @@ Processo: Mantém fluxo após encerramento do N2
   - Usuário #025 no N2 → Faz upgrade → Vira #025 no N3
 - Posição é preservada através dos níveis
 
-#### **Regra 3: Upgrade para Si Mesmo**
-- Doação de upgrade é do usuário para ele mesmo
-- Donor = Receiver = Usuário que está fazendo upgrade
-- Isso marca que o upgrade foi concluído
+#### **Regra 3: Upgrade para Próximo na Fila**
+- Doação de upgrade é do usuário que faz upgrade para o próximo na fila
+- Donor = Usuário que está fazendo upgrade
+- Receiver = Próximo usuário na fila do nível alvo
+- Exceção: Se for o primeiro usuário do nível, não cria doação (não tem para quem doar)
 
 ### **Processamento Automático**
 Após confirmação de uma doação, o sistema automaticamente:
