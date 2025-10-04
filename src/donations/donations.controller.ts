@@ -403,7 +403,7 @@ export class DonationsController {
         level_completed: boolean;
         level_completed_at?: Date;
     }>> {
-        return this.donationsService.getUserLevelProgress(req.user.userId);
+        return this.donationsService.getUserLevelProgress(req.user.id);
     }
 
     /**
@@ -421,7 +421,7 @@ export class DonationsController {
         donations_created: any[];
     }> {
         return this.donationsService.acceptUpgrade(
-            req.user.userId,
+            req.user.id,
             body.from_level,
             body.to_level
         );
