@@ -476,6 +476,7 @@ export class DonationsService {
      * Accept upgrade to next level (user decision)
      * This is the trigger that creates upgrade and cascade donations
      * NEW: Upgrades must be done in sequential order by position
+     * BUGFIX: Users must complete all upgrade payments before upgrading
      */
     async acceptUpgrade(userId: string, fromLevel: number, toLevel: number): Promise<{
         message: string;
@@ -508,17 +509,27 @@ export class DonationsService {
                 );
             }
 
-            // 4. Verify user hasn't already upgraded
+            // 4. BUGFIX: Check if user has pending upgrade payments
+            const hasPendingPayments = await this.checkUserHasPendingUpgradePayments(userId, fromLevel);
+            
+            if (hasPendingPayments) {
+                throw new BadRequestException(
+                    'Você ainda tem pagamentos de upgrade pendentes. ' +
+                    'Complete todos os pagamentos necessários antes de fazer upgrade.'
+                );
+            }
+
+            // 5. Verify user hasn't already upgraded
             if (user.current_level >= toLevel) {
                 throw new BadRequestException('Você já está neste nível ou superior');
             }
 
-            // 5. Verify the upgrade path is valid
+            // 6. Verify the upgrade path is valid
             if (toLevel !== fromLevel + 1) {
                 throw new BadRequestException('Sequência de upgrade inválida');
             }
 
-            // 6. Create upgrade and cascade donations (maintaining position)
+            // 7. Create upgrade and cascade donations (maintaining position)
             const createdDonations = await this.processLevelUpgradeWithPosition(userId, fromLevel);
 
             this.logger.log(`User ${userId} successfully upgraded from level ${fromLevel} to ${toLevel}`);
@@ -544,6 +555,54 @@ export class DonationsService {
                 `Erro ao processar upgrade: ${error.message || 'Erro desconhecido'}`
             );
         }
+    }
+
+    /**
+     * Check if user has pending upgrade payments that must be completed before upgrading
+     * BUGFIX: Users must pay all cascade/upgrade donations before being allowed to upgrade
+     */
+    private async checkUserHasPendingUpgradePayments(userId: string, fromLevel: number): Promise<boolean> {
+        // Define upgrade donation types based on level
+        const upgradeTypes = [];
+        
+        if (fromLevel === 1) {
+            // N1 users must pay CASCADE_N1 donations before upgrading to N2
+            upgradeTypes.push(DonationType.CASCADE_N1);
+        } else if (fromLevel === 2) {
+            // N2 users must pay REINJECTION_N2 donations before upgrading to N3
+            upgradeTypes.push(DonationType.REINJECTION_N2);
+        }
+        
+        if (upgradeTypes.length === 0) {
+            return false; // No upgrade payments required for this level
+        }
+        
+        // Check for pending upgrade donations where user is the DONOR
+        const pendingUpgrades = await this.donationsRepository.find({
+            where: {
+                donor_id: userId,
+                type: In(upgradeTypes),
+                status: In([
+                    DonationStatus.PENDING_PAYMENT,
+                    DonationStatus.PENDING_CONFIRMATION
+                ])
+            }
+        });
+        
+        const hasPending = pendingUpgrades.length > 0;
+        
+        if (hasPending) {
+            this.logger.log(
+                `[UPGRADE-VALIDATION] User ${userId} has ${pendingUpgrades.length} pending upgrade payments ` +
+                `from level ${fromLevel}: ${upgradeTypes.join(', ')}`
+            );
+        } else {
+            this.logger.log(
+                `[UPGRADE-VALIDATION] User ${userId} has no pending upgrade payments from level ${fromLevel}`
+            );
+        }
+        
+        return hasPending;
     }
 
     /**
