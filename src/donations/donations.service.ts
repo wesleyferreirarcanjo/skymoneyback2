@@ -1670,10 +1670,14 @@ export class DonationsService {
     }
 
     /**
-     * Generate initial pending donations for a 100-user queue following the pattern:
-     * #1 receives from #2,#3,#4; #2 from #5,#6,#7; ...; #33 from #98,#99,#100
-     * Only executes when exactly 100 users are present for the given donationNumber.
-     * FIXED: Now supports natural flow progression for subsequent PULLs
+     * Generate monthly cycle donations following the documentation pattern
+     * Generates donations deterministically based on how many times called (month number)
+     * 
+     * N1 Pattern per documentation:
+     * - Month 1: Creates donations for positions #001-#047 (full) + #048-#049 (partial)
+     * - Month 2: Completes #048-#049 and creates donations for #050-#100
+     * 
+     * Each receiver needs 3 donations of R$100 (3:1 pattern)
      */
     async generateCycleDonations(
         donationNumber: number,
@@ -1681,7 +1685,7 @@ export class DonationsService {
         amount: number,
         type?: DonationType,
         deadlineDays?: number,
-    ): Promise<{ createdCount: number; skippedExisting: number; receiversProcessed: number }> {
+    ): Promise<{ createdCount: number; skippedExisting: number; receiversProcessed: number; monthInfo: string }> {
         const queue = await this.queueService.findByDonationNumber(donationNumber);
         if (queue.length !== 100) {
             throw new BadRequestException('Queue must have exactly 100 users to start the cycle');
@@ -1691,16 +1695,44 @@ export class DonationsService {
         const minPosition = ordered[0]?.position ?? 1;
         const isZeroBased = minPosition === 0;
 
+        // Determine which "month" we're in by checking existing donations
+        const existingDonations = await this.donationsRepository.count({
+            where: {
+                type: type || DonationType.PULL,
+                amount: amount
+            }
+        });
+
+        // Calculate month based on existing donations
+        // Month 1: ~141 donations (47 full + 2 partial = 47*3 + 3 = 144)
+        // Month 2: starts after that
+        const isMonth1 = existingDonations < 50;
+        const month = isMonth1 ? 1 : 2;
+
+        this.logger.log(`[CYCLE-MONTH-${month}] Starting cycle generation for level ${donationNumber}`);
+
         let createdCount = 0;
         let skippedExisting = 0;
         let receiversProcessed = 0;
 
-        // Calculate how many receivers we can process based on available donors
-        const maxReceivers = 33;
-        const receiverStart = isZeroBased ? 0 : 1;
-        const receiverEnd = isZeroBased ? maxReceivers - 1 : maxReceivers;
-
-        this.logger.log(`[CYCLE] Processing ${maxReceivers} receivers for level ${donationNumber} (positions ${receiverStart}-${receiverEnd})`);
+        // Define receivers range based on month following documentation
+        let receiverStart: number;
+        let receiverEnd: number;
+        
+        if (month === 1) {
+            // Month 1: #001-#049 (47 complete + 2 partial)
+            // #001-#047: 3 donations each (complete)
+            // #048: 2 donations (partial)
+            // #049: 1 donation (partial)
+            receiverStart = isZeroBased ? 0 : 1;
+            receiverEnd = isZeroBased ? 48 : 49;
+            this.logger.log(`[CYCLE-MONTH-1] Processing positions ${receiverStart}-${receiverEnd}`);
+        } else {
+            // Month 2: Complete #048-#049, then #050-#100
+            receiverStart = isZeroBased ? 47 : 48;
+            receiverEnd = isZeroBased ? 99 : 100;
+            this.logger.log(`[CYCLE-MONTH-2] Processing positions ${receiverStart}-${receiverEnd}`);
+        }
 
         for (let r = receiverStart; r <= receiverEnd; r++) {
             const receiverEntry = ordered.find(q => q.position === r);
@@ -1710,40 +1742,53 @@ export class DonationsService {
             }
             const receiverId = receiverEntry.user_id;
 
-            // ✅ NOVA LÓGICA: Verificar quanto o receiver já recebeu
-            const receiverDonations = await this.donationsRepository.find({
+            // Calculate how many donations this receiver should get in this month
+            let donationsForThisReceiver = 3; // Default: 3 donations
+            
+            if (month === 1) {
+                // Month 1 special cases
+                if (r === (isZeroBased ? 47 : 48)) {
+                    donationsForThisReceiver = 2; // #048 gets 2 donations
+                } else if (r === (isZeroBased ? 48 : 49)) {
+                    donationsForThisReceiver = 1; // #049 gets 1 donation
+                }
+            } else {
+                // Month 2: Complete partials first
+                if (r === (isZeroBased ? 47 : 48)) {
+                    donationsForThisReceiver = 1; // Complete #048 (needs 1 more)
+                } else if (r === (isZeroBased ? 48 : 49)) {
+                    donationsForThisReceiver = 2; // Complete #049 (needs 2 more)
+                }
+            }
+
+            // Check how many donations this receiver already has
+            const existingReceiverDonations = await this.donationsRepository.count({
                 where: {
                     receiver_id: receiverId,
                     type: type || DonationType.PULL,
-                    status: DonationStatus.CONFIRMED
+                    amount: amount
                 }
             });
 
-            const requiredDonations = this.getRequiredDonationsForLevel(donationNumber);
-            const receivedAmount = receiverDonations.reduce((sum, d) => sum + parseFloat(d.amount.toString()), 0);
-            const requiredAmount = requiredDonations * amount;
+            // Calculate how many to create
+            const donationsToCreate = Math.max(0, donationsForThisReceiver - existingReceiverDonations);
 
-            // Se já completou, pular
-            if (receivedAmount >= requiredAmount) {
-                this.logger.log(`[CYCLE] Receiver ${receiverId} (pos ${r}) already completed level ${donationNumber} - skipping`);
+            if (donationsToCreate === 0) {
+                this.logger.log(`[CYCLE] Receiver ${receiverId} (pos ${r}) already has required donations for this month`);
                 skippedExisting++;
                 continue;
             }
 
-            // Calcular quantas doações ainda precisa
-            const remainingAmount = requiredAmount - receivedAmount;
-            const remainingDonations = Math.ceil(remainingAmount / amount);
+            this.logger.log(`[CYCLE] Receiver ${receiverId} (pos ${r}) needs ${donationsToCreate} more donations`);
 
-            this.logger.log(`[CYCLE] Receiver ${receiverId} (pos ${r}) needs ${remainingDonations} more donations (${remainingAmount} remaining)`);
-
-            // Find 3 donors for this receiver
+            // Find 3 donors for this receiver using 3:1 pattern
             const donorsPositions = isZeroBased
                 ? [3 * r + 1, 3 * r + 2, 3 * r + 3]
                 : [3 * r - 1, 3 * r, 3 * r + 1];
 
             let donationsCreatedForReceiver = 0;
             for (const pos of donorsPositions) {
-                if (pos > queue.length || donationsCreatedForReceiver >= remainingDonations) {
+                if (pos > queue.length || donationsCreatedForReceiver >= donationsToCreate) {
                     break;
                 }
 
@@ -1759,7 +1804,7 @@ export class DonationsService {
                     continue;
                 }
 
-                // ✅ NOVA LÓGICA: Verificar se esta doação específica já existe
+                // Check if this specific donation already exists
                 const existing = await this.donationsRepository.findOne({
                     where: {
                         donor_id: donorEntry.user_id,
@@ -1793,8 +1838,9 @@ export class DonationsService {
             receiversProcessed++;
         }
 
-        this.logger.log(`[CYCLE] Level ${donationNumber} completed: ${createdCount} donations created, ${skippedExisting} skipped, ${receiversProcessed} receivers processed`);
-        return { createdCount, skippedExisting, receiversProcessed };
+        const monthInfo = `Month ${month}: Processed positions ${receiverStart}-${receiverEnd}`;
+        this.logger.log(`[CYCLE-MONTH-${month}] Completed: ${createdCount} donations created, ${skippedExisting} skipped, ${receiversProcessed} receivers processed`);
+        return { createdCount, skippedExisting, receiversProcessed, monthInfo };
     }
 
     // ===== AUXILIARY METHODS FOR SKYMONEY 2.0 LOGIC =====
