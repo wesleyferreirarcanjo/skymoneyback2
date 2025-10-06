@@ -17,6 +17,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DonationsService } from './donations.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../users/entities/user.entity';
 import {
     DonationStatsDto,
     DonationToSendDto,
@@ -30,6 +33,16 @@ import {
     DonationUserReportsListDto,
     DonationUserReportItemDto,
     DonationUserReportsFiltersDto,
+    DonationAdminStatsDto,
+    DonationAdminListDto,
+    DonationAdminItemDto,
+    DonationAdminFiltersDto,
+    DonationReportAdminListDto,
+    DonationReportAdminItemDto,
+    DonationReportAdminStatsDto,
+    DonationReportAdminFiltersDto,
+    DonationReportResolutionDto,
+    DonationReportResolutionResponseDto,
 } from './dto';
 
 @Controller('donations')
@@ -88,12 +101,13 @@ export class DonationsController {
         @Param('id') donationId: string,
         @Request() req,
         @UploadedFile() file: any,
+        @Body('comprovanteBase64') comprovanteBase64?: string,
     ): Promise<ComprovanteUploadResponseDto> {
-        if (!file) {
-            throw new BadRequestException('Arquivo de comprovante é obrigatório');
+        if (!file && !comprovanteBase64) {
+            throw new BadRequestException('Comprovante é obrigatório (arquivo ou base64)');
         }
 
-        return this.donationsService.uploadComprovante(donationId, req.user.id, file);
+        return this.donationsService.uploadComprovante(donationId, req.user.id, file, comprovanteBase64);
     }
 
     /**
@@ -167,6 +181,250 @@ export class DonationsController {
         @Request() req,
     ): Promise<DonationUserReportItemDto> {
         return this.donationsService.getUserReportDetails(donationId, req.user.id);
+    }
+
+    // ========================= ADMIN ROUTES (migrated) =========================
+    @Get('admin/stats')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN)
+    async getAdminStats(
+        @Query('status') status?: string,
+        @Query('type') type?: string,
+        @Query('donorId') donorId?: string,
+        @Query('receiverId') receiverId?: string,
+        @Query('dateFrom') dateFrom?: string,
+        @Query('dateTo') dateTo?: string,
+        @Query('minAmount') minAmount?: string,
+        @Query('maxAmount') maxAmount?: string,
+    ): Promise<DonationAdminStatsDto> {
+        const filters: DonationAdminFiltersDto = {
+            status: status as any,
+            type: type as any,
+            donorId,
+            receiverId,
+            dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+            dateTo: dateTo ? new Date(dateTo) : undefined,
+            minAmount: minAmount ? parseFloat(minAmount) : undefined,
+            maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
+        };
+
+        return this.donationsService.getAdminStats(filters);
+    }
+
+    @Get('admin/list')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN)
+    async getAllDonationsForAdmin(
+        @Query('page') page?: string,
+        @Query('limit') limit?: string,
+        @Query('status') status?: string,
+        @Query('type') type?: string,
+        @Query('donorId') donorId?: string,
+        @Query('receiverId') receiverId?: string,
+        @Query('dateFrom') dateFrom?: string,
+        @Query('dateTo') dateTo?: string,
+        @Query('minAmount') minAmount?: string,
+        @Query('maxAmount') maxAmount?: string,
+    ): Promise<DonationAdminListDto> {
+        const filters: DonationAdminFiltersDto = {
+            status: status as any,
+            type: type as any,
+            donorId,
+            receiverId,
+            dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+            dateTo: dateTo ? new Date(dateTo) : undefined,
+            minAmount: minAmount ? parseFloat(minAmount) : undefined,
+            maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
+        };
+
+        const parsedPage = page ? parseInt(page, 10) : 1;
+        const parsedLimit = limit ? parseInt(limit, 10) : 20;
+
+        return this.donationsService.getAllDonationsForAdmin(filters, parsedPage, parsedLimit);
+    }
+
+    @Get('admin/reports')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN)
+    async getReportedDonations(
+        @Query('page') page?: string,
+        @Query('limit') limit?: string,
+        @Query('dateFrom') dateFrom?: string,
+        @Query('dateTo') dateTo?: string,
+        @Query('minAmount') minAmount?: string,
+        @Query('maxAmount') maxAmount?: string,
+        @Query('donorId') donorId?: string,
+        @Query('receiverId') receiverId?: string,
+        @Query('type') type?: string,
+    ): Promise<DonationReportAdminListDto> {
+        const filters: DonationReportAdminFiltersDto = {
+            page: page ? parseInt(page, 10) : 1,
+            limit: limit ? parseInt(limit, 10) : 20,
+            dateFrom,
+            dateTo,
+            minAmount: minAmount ? parseFloat(minAmount) : undefined,
+            maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
+            donorId,
+            receiverId,
+            type,
+        };
+
+        return this.donationsService.getAdminReportedDonations(filters);
+    }
+
+    @Get('admin/reports/stats')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN)
+    async getReportedDonationsStats(
+        @Query('dateFrom') dateFrom?: string,
+        @Query('dateTo') dateTo?: string,
+        @Query('minAmount') minAmount?: string,
+        @Query('maxAmount') maxAmount?: string,
+        @Query('donorId') donorId?: string,
+        @Query('receiverId') receiverId?: string,
+        @Query('type') type?: string,
+    ): Promise<DonationReportAdminStatsDto> {
+        const filters: DonationReportAdminFiltersDto = {
+            dateFrom,
+            dateTo,
+            minAmount: minAmount ? parseFloat(minAmount) : undefined,
+            maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
+            donorId,
+            receiverId,
+            type,
+        };
+
+        return this.donationsService.getAdminReportedDonationsStats(filters);
+    }
+
+    @Get('admin/reports/:id')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN)
+    async getReportedDonationDetails(
+        @Param('id') donationId: string,
+    ): Promise<DonationReportAdminItemDto> {
+        return this.donationsService.getAdminReportedDonationDetails(donationId);
+    }
+
+    @Post('admin/reports/:id/resolve')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN)
+    async resolveDonationReport(
+        @Param('id') donationId: string,
+        @Body() resolutionData: DonationReportResolutionDto,
+    ): Promise<DonationReportResolutionResponseDto> {
+        return this.donationsService.resolveDonationReport(donationId, resolutionData);
+    }
+
+    @Get('admin/:id')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN)
+    async getDonationForAdmin(
+        @Param('id') donationId: string,
+    ): Promise<DonationAdminItemDto> {
+        return this.donationsService.getDonationForAdmin(donationId);
+    }
+
+    /**
+     * POST /donations/admin/cycle/:donationNumber/start
+     * Starts the initial cycle by generating pending donations based on a 100-user queue pattern
+     */
+    @Post('admin/cycle/:donationNumber/start')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN)
+    async startCycle(
+        @Param('donationNumber') donationNumber: string,
+        @Body() body: { donorsCount: number; amount: number; type?: string; deadlineDays?: number },
+    ) {
+        const donorsCount = body.donorsCount ?? 3;
+        const amount = body.amount;
+        const type = body.type as any;
+        const deadlineDays = body.deadlineDays;
+
+        return this.donationsService.generateCycleDonations(
+            parseInt(donationNumber, 10),
+            donorsCount,
+            amount,
+            type,
+            deadlineDays,
+        );
+    }
+
+    /**
+     * Generate monthly PULL donations for all active levels
+     * SkyMoney 2.0 - Monthly PULL generation
+     */
+    @Post('admin/generate-monthly-pull')
+    @Roles(UserRole.ADMIN)
+    @UseGuards(RolesGuard)
+    async generateMonthlyPull(): Promise<{ 
+        message: string; 
+        created: number; 
+        errors: string[];
+        breakdown: {
+            n1: number;
+            n2: number;
+            n3: number;
+        }
+    }> {
+        return this.donationsService.generateMonthlyPull();
+    }
+
+    /**
+     * Get level statistics for a specific level
+     * SkyMoney 2.0 - Level progress tracking
+     */
+    @Get('admin/level-stats/:level')
+    @Roles(UserRole.ADMIN)
+    @UseGuards(RolesGuard)
+    async getLevelStats(@Param('level', ParseIntPipe) level: number): Promise<{
+        level: number;
+        totalUsers: number;
+        activeUsers: number;
+        completedUsers: number;
+        averageProgress: number;
+        totalDonationsReceived: number;
+        totalAmountReceived: number;
+    }> {
+        return this.donationsService.getLevelStats(level);
+    }
+
+    /**
+     * Get user progress in all levels
+     * SkyMoney 2.0 - User level progress
+     */
+    @Get('my-level-progress')
+    async getUserLevelProgress(@Request() req): Promise<Array<{
+        level: number;
+        donations_received: number;
+        donations_required: number;
+        total_received: number;
+        progress_percentage: number;
+        level_completed: boolean;
+        level_completed_at?: Date;
+    }>> {
+        return this.donationsService.getUserLevelProgress(req.user.id);
+    }
+
+    /**
+     * Accept upgrade to next level
+     * SkyMoney 2.0 - User accepts upgrade after completing a level
+     */
+    @Post('accept-upgrade')
+    @UseGuards(JwtAuthGuard)
+    async acceptUpgrade(
+        @Request() req,
+        @Body() body: { from_level: number; to_level: number }
+    ): Promise<{
+        message: string;
+        new_level: number;
+        donations_created: any[];
+    }> {
+        return this.donationsService.acceptUpgrade(
+            req.user.id,
+            body.from_level,
+            body.to_level
+        );
     }
 
 }

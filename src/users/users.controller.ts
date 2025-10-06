@@ -10,10 +10,13 @@ import {
   Request,
   ClassSerializerInterceptor,
   UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UploadAvatarDto } from './dto/upload-avatar.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -69,5 +72,18 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
+  }
+
+  @Post('profile/avatar')
+  @UseGuards(JwtAuthGuard)
+  uploadAvatarBase64(@Request() req, @Body() uploadAvatarDto: UploadAvatarDto) {
+    return this.usersService.updateAvatar(req.user.id, uploadAvatarDto.avatar);
+  }
+
+  @Post('profile/avatar/upload')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  uploadAvatarFile(@Request() req, @UploadedFile() file: any) {
+    return this.usersService.updateAvatarFile(req.user.id, file);
   }
 }

@@ -125,4 +125,14 @@ export class User {
     @Column({ type: 'uuid', nullable: true })
     adminApprovedBy?: string;
 
+    // SkyMoney 2.0 fields
+    @Column({ type: 'int', default: 1, comment: 'Current level (1, 2, or 3)' })
+    current_level: number;
+
+    @Column({ type: 'boolean', default: false, comment: 'Can reenter after completing N3' })
+    can_reenter: boolean;
+
+    @Column({ type: 'timestamptz', nullable: true, comment: 'When completed N3' })
+    n3_completed_at?: Date;
+
 }

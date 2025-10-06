@@ -1,4 +1,4 @@
-import { UserPublicProfileDto } from './user-public-profile.dto';
+import { UserCompleteDto } from './user-complete.dto';
 
 export class DonationToReceiveDto {
     id: string;
@@ -20,5 +20,10 @@ export class DonationToReceiveDto {
     report_resolution?: string;
     report_resolution_message?: string;
     report_resolved_at?: Date;
-    donor: UserPublicProfileDto;
+    donor: UserCompleteDto;
+    // Queue position information
+    donor_queue_position?: number;
+    donor_queue_level?: number;
+    receiver_queue_position?: number;
+    receiver_queue_level?: number;
 }
