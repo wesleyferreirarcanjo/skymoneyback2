@@ -20,14 +20,11 @@ export class UsersService {
   async create(createUserDto: CreateUserDto): Promise<User> {
     // Check if user already exists
     const existingUser = await this.usersRepository.findOne({
-      where: [
-        { email: createUserDto.email },
-        { phone: createUserDto.phone },
-      ],
+      where: { email: createUserDto.email },
     });
 
     if (existingUser) {
-      throw new ConflictException('User with this email or phone already exists');
+      throw new ConflictException('User with this email already exists');
     }
 
     // Hash password
@@ -122,14 +119,11 @@ export class UsersService {
 async createWithHashedPassword(userData: Omit<CreateUserDto, 'password'> & { password: string }): Promise<User> {
     // Check if user already exists
     const existingUser = await this.usersRepository.findOne({
-      where: [
-        { email: userData.email },
-        { phone: userData.phone },
-      ],
+      where: { email: userData.email },
     });
 
     if (existingUser) {
-      throw new ConflictException('User with this email or phone already exists');
+      throw new ConflictException('User with this email already exists');
     }
 
     // Only include properties that exist in the User entity
