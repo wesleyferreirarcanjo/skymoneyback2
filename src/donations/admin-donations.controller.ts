@@ -34,11 +34,6 @@ import {
 export class AdminDonationsController {
     constructor(private readonly donationsService: DonationsService) {}
 
-    /**
-     * GET /admin/donations/stats
-     * Estatísticas gerais de doações para admin
-     * ADMIN ONLY
-     */
     @Get('stats')
     async getAdminStats(
         @Query('status') status?: string,
@@ -64,11 +59,6 @@ export class AdminDonationsController {
         return this.donationsService.getAdminStats(filters);
     }
 
-    /**
-     * GET /admin/donations/list
-     * Lista todas as doações para admin com filtros e paginação
-     * ADMIN ONLY
-     */
     @Get('list')
     async getAllDonationsForAdmin(
         @Query('page') page?: string,
@@ -99,11 +89,6 @@ export class AdminDonationsController {
         return this.donationsService.getAllDonationsForAdmin(filters, parsedPage, parsedLimit);
     }
 
-    /**
-     * GET /admin/donations/reports
-     * Lista todos os reportes de doações não recebidas
-     * ADMIN ONLY
-     */
     @Get('reports')
     async getReportedDonations(
         @Query('page') page?: string,
@@ -131,11 +116,6 @@ export class AdminDonationsController {
         return this.donationsService.getAdminReportedDonations(filters);
     }
 
-    /**
-     * GET /admin/donations/reports/stats
-     * Estatísticas dos reportes de doações não recebidas
-     * ADMIN ONLY
-     */
     @Get('reports/stats')
     async getReportedDonationsStats(
         @Query('dateFrom') dateFrom?: string,
@@ -159,11 +139,6 @@ export class AdminDonationsController {
         return this.donationsService.getAdminReportedDonationsStats(filters);
     }
 
-    /**
-     * GET /admin/donations/reports/:id
-     * Detalhes completos de um reporte de doação não recebida
-     * ADMIN ONLY
-     */
     @Get('reports/:id')
     async getReportedDonationDetails(
         @Param('id') donationId: string,
@@ -171,11 +146,6 @@ export class AdminDonationsController {
         return this.donationsService.getAdminReportedDonationDetails(donationId);
     }
 
-    /**
-     * POST /admin/donations/reports/:id/resolve
-     * Resolve um reporte de doação não recebida
-     * ADMIN ONLY
-     */
     @Post('reports/:id/resolve')
     async resolveDonationReport(
         @Param('id') donationId: string,
@@ -184,11 +154,6 @@ export class AdminDonationsController {
         return this.donationsService.resolveDonationReport(donationId, resolutionData);
     }
 
-    /**
-     * GET /admin/donations/:id
-     * Detalhes completos de uma doação para admin
-     * ADMIN ONLY
-     */
     @Get(':id')
     async getDonationForAdmin(
         @Param('id') donationId: string,
@@ -196,3 +161,6 @@ export class AdminDonationsController {
         return this.donationsService.getDonationForAdmin(donationId);
     }
 }
+
+
+

@@ -1,0 +1,113 @@
+Prospecção SkyMoneyIA 🤖🚀🤖🚀🤖🚀🤖🚀🚨:
+🚀 SkyMoneyIA 2.0 — Fluxo Completo com Cronograma e Cascatas
+♻️ Regras Globais
+* Participantes fixos: 100 (IDs #001…#100, sempre 3 dígitos).
+* Contribuição mensal (PULL): todos doam R$100 → R$10.000/mês.
+* Ordem da fila: sequencial por ID (#001 → #002 → … → #100).
+* Excedentes: sempre realocados ao próximo recebedor da fila.
+* Comprovantes: somente imagens (JPG/PNG), nunca PDF.
+* Fluxo P2P: doador envia comprovante → recebedor confirma → card some → vai para Histórico.
+* Capacidade máxima: 100 participantes. Se cheio, aparece: “Grupo lotado, em breve liberaremos novas vagas/novo grupo”.
+
+🟨 NÍVEL 1 — Ciclo de R$100 + Cascata
+🔎 O que é a Cascata no N1?
+* Cada participante precisa de 3 doações de R$100 = R$300.
+* Ele não fica com lucro: 
+* R$200 → Upgrade N1→N2 (primeira entrada no N2).
+* R$100 → Cascata N1 (esse R$100 seria “lucro”, mas é reinjetado para o próximo recebedor do N1).
+* Isso cria um efeito cascata, onde cada recebedor novo alimenta mais gente no próprio mês.
+
+📅 Cronograma N1 (com cascata)
+Mês 1
+* Entrada do PULL: R$10.000 = 100×R$100.
+* Recebedores principais: #001–#033 (33 pessoas recebem 3×R$100 cada).
+* Cada um gera R$100 de cascata → 33×R$100 = R$3.300.
+* R$3.300 → completa 11 novas pessoas (#034–#044).
+* Esses 11 também liberam R$100 cada → R$1.100 → dá para mais 3 novas pessoas (#045–#047).
+* Saldo final M1: #001–#047 concluídos. 
+* Parcial: #048 (200/300), #049 (100/300).
+* Upgrades enviados ao N2: 47×R$200 = R$9.400.
+Mês 2
+* Nova entrada PULL: R$10.000.
+* Completa #048 (falta R$100) e #049 (falta R$200).
+* Segue beneficiando mais 47 pessoas (#050–#096).
+* Cascata do mês (R$100 de cada concluído): 47×R$100 = R$4.700 → mais 15 pessoas (#097–#111). 
+* Mas só temos até #100 → paramos no #100.
+* Saldo final M2: #048–#100 concluídos.
+* Upgrades enviados ao N2: +52×R$200 = R$10.400.
+* Encerramento do N1: início do Mês 2 já fecha os 100.
+✅ Resumo N1:
+* Encerrado em 2 meses (sem cascata seriam 4).
+* 100 upgrades enviados ao N2.
+* Nenhum lucro líquido no N1 (tudo vira upgrade + cascata).
+🟧 NÍVEL 2 — Ciclo de R$200 + Reinjeção total (R$2.000) + Pacotes 8k
+🔎 O que é a Cascata no N2?
+* Cada participante precisa de 18×R$200 = R$3.600.
+* Ao concluir: 
+* R$1.600 → Upgrade N2→N3.
+* R$2.000 → Reinjeta no N2 (10 novas doações de R$200 para acelerar a fila).
+* Lucro líquido = R$0.
+* Além disso, a cada 5 concluintes no N2, dispara um pacote de R$8.000 (40×R$200) que também é reinjetado no N2.
+📅 Cronograma N2 (com reinjeções)
+Mês 2 (entrada inicial)
+* Vêm do N1: 100 upgrades (100×R$200 = R$20.000).
+* Fecha #001–#011 (11×18 = 198 unidades ≈ R$39.600).
+* Parciais: #012 (10/18).
+* Cascata gerada: 11×R$2.000 = R$22.000 (110×R$200).
+* Pacote 8k: 2 pacotes (16k) ativados pelos 10 upgrades.
+* Saldo total reinjetado já move +11 pessoas na sequência.
+Mês 3
+* Nova entrada PULL: R$10.000 = 50×R$200.
+* Mais cascata de quem concluiu no mês anterior.
+* Fecha #012–#023.
+* Pacote 8k: +2 pacotes.
+* Avanço acelerado para fila até #030.
+Mês 4–7
+* PULL mensal + cascata (2k de cada concluinte) + pacotes 8k a cada 5 upgrades.
+* A fila vai sendo drenada rapidamente: 
+* M4 fecha até #045.
+* M5 fecha até #065.
+* M6 fecha até #085.
+* M7 fecha até #100.
+✅ Resumo N2:
+* Encerrado em Mês 7.
+* 100 upgrades enviados ao N3 (1.600 cada).
+* Nenhum lucro líquido → tudo reinjetado (2k de cada concluinte + pacotes 8k).
+🟩 NÍVEL 3 — Ciclo de R$1.600 + ADM + Reforço + Finais
+🔎 O que é a Cascata no N3?
+* Cada participante precisa de 27×R$1.600 = R$43.200.
+* Distribuição das 27 doações: 
+* 1–2: ADM (R$3.200 no total).
+* 3–7: Reforço R$8.000 (5×1.600). 
+* Enquanto N2 ativo → voltam para o N2.
+* Após N2 encerrar → ficam no N3 como “cascata final”.
+* 8–27: Doações finais (R$32.000 líquidos).
+📅 Cronograma N3
+Mês 3–7 (N2 ainda ativo)
+* Entram os upgrades vindos do N2.
+
+* Primeiros concluintes (#001–#020) já ativos no N3.
+* Suas 2 primeiras doações vão para ADM, próximas 5 reinjetadas no N2.
+* N2 acelera até encerrar no M7.
+Mês 8 em diante (N2 encerrado)
+* PULL mensal R$10.000 (6 doações de 1.600) + reforço N3 (8k de cada novo concluinte).
+* Avanço consistente: 10–15 concluintes por mês.
+* M15: ~#070 concluídos.
+* M18–M20: todos (#001–#100) concluíram.
+✅ Resumo N3:
+* Encerrado em Mês 18–20.
+* Cada participante recebe R$32.000 líquidos.
+* 2 ADM + 5 reforços (8k) não ficam com ele (contam no painel como “recebidas”).
+* No painel aparece: 27/27 concluídas (ADM 2 | Reforço 5 | Líquidas 20).
+🔁 Reentrada Final
+* Ao concluir N3, participante vê a mensagem:
+“Parabéns, você concluiu a SkyMoneyIA 2.0! Deseja continuar?” 
+* [Sim, reentrar] → volta para o N1 como novo #001 (ou na fila aberta).
+* [Não, encerrar] → sai com R$32.000 líquidos, libera a vaga para outro.
+📌 Resumo Geral
+* N1: Fecha em 2 meses (com cascata).
+* N2: Fecha em 7 meses (com reinjeções + pacotes 8k).
+* N3: Fecha em 18–20 meses (com ADM + reforços + cascata final).
+* Sistema limitado a 100 participantes fixos.
+* Sem lucro antecipado nos níveis iniciais (tudo reinjetado).
+* Liquidez garantida no N3: cada um recebe R$32.000 líquidos.
